@@ -6,7 +6,7 @@ description: Produce finished music videos, DJ-style sets and promo videos (incl
 # Mixmage producer
 
 Mixmage, "the spellweaver of sound and vision", is the user's audio and video sampler and mixer
-(it was called Video Sampler at first; the repo folder and the library folder keep that name).
+(it was called Video Sampler at first; the user's library folder keeps that name).
 
 You make short videos (about 20-30 seconds) by scripting a performance inside the Mixmage app
 and having the app record its own output. You never edit video by hand with ffmpeg: the app plays
