@@ -137,6 +137,31 @@ async function cutClip({ sourceFile, sourceId, start, end, name }) {
   };
 }
 
+// Every beat of a song (src/beats.js), worked out in a background thread so the app never stalls,
+// and kept for the session. { bpm, beats, downbeat, bars, ... }; see beats.js.
+const beatCache = new Map();
+function mediaBeats({ file, bpm }) {
+  const key = `${file}|${bpm || ''}`;
+  if (!beatCache.has(key)) {
+    const job = (async () => {
+      const { RATE } = require('./beats');
+      const pcm = await decodePcm(file, 0, 36000, RATE);
+      const { Worker } = require('worker_threads');
+      return new Promise((resolve, reject) => {
+        const w = new Worker(`const { parentPort, workerData } = require('worker_threads');
+          const { trackBeats } = require(workerData.mod);
+          parentPort.postMessage(trackBeats(new Int16Array(workerData.pcm), workerData.bpm));`,
+        { eval: true, workerData: { mod: path.join(__dirname, 'beats.js'), pcm: pcm.buffer, bpm: bpm || 120 } });
+        w.once('message', resolve);
+        w.once('error', reject);
+      });
+    })();
+    job.catch(() => beatCache.delete(key));
+    beatCache.set(key, job);
+  }
+  return beatCache.get(key);
+}
+
 function decodePcm(file, start, dur, rate) {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, ['-v', 'error', '-ss', start.toFixed(3), '-i', file, '-t', dur.toFixed(3),
@@ -427,6 +452,7 @@ function registerIpc() {
   ipcMain.handle('source:sounds', (_e, opts) => findSounds(opts));
   ipcMain.handle('media:level', (_e, opts) => mediaLevel(opts));
   ipcMain.handle('media:bpm', (_e, opts) => estimateBpm(opts));
+  ipcMain.handle('media:beats', (_e, opts) => mediaBeats(opts));
   ipcMain.handle('rec:save', (_e, bytes, title) => saveRecording(bytes, title));
   ipcMain.handle('rec:remove', guard((_e, id) => fs.rmSync(path.join(recordingsDir, `${safeId(id)}.mp4`), { force: true })));
   ipcMain.handle('clip:audio', (_e, clipId) => {
@@ -450,7 +476,7 @@ async function runDemo() {
   const variant = (process.env.DEMO_VARIANT || 'mix').replace(/[^\w-]/g, '');
   const extraFile = process.env.DEMO_EXTRA && path.join(path.resolve(process.env.DEMO_EXTRA), 'state.json');
   const extra = extraFile && fs.existsSync(extraFile) ? fs.readFileSync(extraFile, 'utf8') : 'null';
-  await js(`window.__demoVariant = ${JSON.stringify(variant)}; window.__demoExtra = ${extra}; window.__demoTalkPicks = ${JSON.stringify(process.env.DEMO_TALK_PICKS || '')}; 0`);
+  await js(`window.__demoVariant = ${JSON.stringify(variant)}; window.__demoExtra = ${extra}; window.__demoTalkPicks = ${JSON.stringify(process.env.DEMO_TALK_PICKS || '')}; window.__demoSwap = ${!!process.env.DEMO_SWAP}; 0`);
   await js(`${fs.readFileSync(process.env.DEMO_JS, 'utf8')}\n;0`);
   console.log('DEMO_PREPARE', JSON.stringify(await js('window.__demoPrepare()')));
 
@@ -460,7 +486,10 @@ async function runDemo() {
   win.focus();
   await sleep(400);
   const frames = [];
-  let capturing = true;
+  // DEMO_NO_APP=1 skips filming the app (only the output is made): the frames are held in memory,
+  // about 250 KB each at 20 a second, too much for a piece several minutes long.
+  const filmApp = !process.env.DEMO_NO_APP;
+  let capturing = filmApp;
   const grab = (async () => {
     while (capturing) {
       const t = Date.now();
@@ -483,6 +512,7 @@ async function runDemo() {
   await run(ffmpegPath, ['-y', '-v', 'error', '-i', res.file, '-c:v', 'copy',
     '-af', 'loudnorm=I=-14:TP=-1.5:LRA=9', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   fs.rmSync(res.file, { force: true });
+  if (!filmApp) { console.log('DEMO_DONE', JSON.stringify({ final })); return; }
 
   const dir = path.join(out, `frames-${variant}`);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -567,6 +597,11 @@ function createWindow() {
         const fxr = await win.webContents.executeJavaScript('window.__smokeFx()');
         console.log('SMOKE_FX', JSON.stringify(fxr));
         if (fxr.offSpread > 2 || fxr.onSpread < 60 || !fxr.viewerCanvas) errors++;
+        const tb = await mediaBeats({ file: src.file, bpm: 118 });
+        const gaps = tb.beats.slice(1).map((t, k) => t - tb.beats[k]);
+        const spread = Math.max(...gaps.slice(2, -2)) - Math.min(...gaps.slice(2, -2));
+        console.log('SMOKE_TRACK', JSON.stringify({ bpm: tb.bpm, beats: tb.beats.length, spread: +spread.toFixed(3), downbeat: tb.downbeat }));
+        if (Math.abs(tb.bpm - 120) > 1 || tb.beats.length < 8 || spread > 0.03) errors++;
         const bt = await win.webContents.executeJavaScript('window.__smokeBeat()');
         console.log('SMOKE_BEAT', JSON.stringify(bt));
         if (!(bt.peak > 0.2) || !(bt.minDuck < 0.7) || !(bt.restored > 0.95)) errors++;

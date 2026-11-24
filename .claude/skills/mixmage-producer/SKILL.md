@@ -29,6 +29,10 @@ the user plainly which judgments are measured and which are theirs to make by ea
 | Hearing the words | `node scripts/captions.js <video id> [from] [to]` prints YouTube captions with times (many music uploads have none; YouTube rate-limits this, retry later) |
 | Hearing the key | `node scripts/key.js <file> [from] [to]`: the key (Krumhansl profiles) and the strongest bass notes |
 | Hearing the song's form | `node scripts/bars.js <library> <source id>`: every bar's root note and level, 8 a row, from the app's one-bar clips; sections and chord cycles show up as repeating rows |
+| Hearing where it is sung | `node scripts/vocals.js <library> <source id>`: per bar, the center-to-side ratio in the voice band (the lead vocal is mixed center); runs of V are sung, runs without are instrumental. A rough signal (±3 dB): read it as runs alongside `bars.js`, never bar by bar |
+| Finding every beat | `node scripts/beats.js <file> <bpm hint> [--json out.json]`: tracks each beat (src/beats.js: librosa's dynamic-programming tracker on log-band flux, Essentia's multi-feature agreement, aubio's HFC and peak picking, HPSS bass roots with a confidence), prints tempo per 8 bars (a live band drifts) |
+| Hearing whether the added kick is on the band | `node scripts/sync-check.js <render> <song> <beats.json> <from> <to>`: matched-filters the beat box's kick in the render against the song's tracked beats; in sync = median within ~5 ms, most beats within 15 ms |
+| Hearing whether the added parts are subtle | `node scripts/compare-mix.js <remix> <original> <from> <to> [originalTimeAtFrom]`: each band's share of the total in the original and the remix over the same music. Subtle = low bands within +2 dB, the rest within 1.5 dB; mids losing share means the added beat buries the voice and guitars. Give the last argument when the song repeats itself, or it can match the wrong chorus |
 | Hearing a flam | `node scripts/beat-phase.js <file> <bpm> <from> <to>`: folds low-band onsets over the beat; one peak = added drums land with the song, two = they don't |
 
 Read every contact sheet you make. Bugs found this way so far: a black opening, credit frames, title
@@ -70,7 +74,29 @@ Existing variants (all in `scripts/demo-performance.js`, in the `variants` objec
 | `promo2`..`promo6` | Forge promos: one song each, picture cut per bar, titles |
 | `cut80s` | The 80s-turntable style: half-bar cuts, transformer, beat juggle, stabs, scratch wobble, echo-out |
 | `style80s`, `styleSmooth`, `styleBass` | The three styles on the second, all-new crate |
-| `shroomEdit` | "Chips" (country rock) as an EDM edit: beat box, build and drop, Shroom FX over cowboys and mushrooms |
+| `rodeoEdit` | "Chips" (country rock) as a 33-bar dance edit: beat box following the band, build and drop, Shroom FX over rodeo footage |
+| `rodeoFull` | The whole of "Chips" (5:43, every lyric) as a dance record: three builds, four drops, two breakdowns, picture telling the song |
+| `rodeoVideo` | The music video: "Chips" exactly as recorded, the rodeo story cut to its tracked bars, Shroom FX pulsing on the band's beats; then `original-audio.js` lays in the record's own sound |
+
+**When the user wants the song itself** (they did, after hearing the dance versions): play it from
+one deck, add nothing to the sound, cut the picture to its tracked bars (`timeOf`), let the effects
+pulse on its beats (`fx.follow = { deck, beats }`), then replace the render's sound with the
+original's: `node scripts/original-audio.js demo/<name>-output.mp4 <original file> <out.mp4>`
+(it finds the offset by cross-correlation, to the millisecond). The app's output always passes its
+limiter, so without that step a mastered record is squashed. A shorter version is a stretch cut from
+that file with ffmpeg and a fade, not a re-edit of the song.
+
+**Picture tells the song.** Before choosing footage, find out what the song is about (lyrics, the
+user's description) and cut a story to its sections. "Chips" is a get-back-up rodeo song you'd play
+in an old truck or a dive bar, so: the bar and the arena lights for the intro, a truck in the mud as
+the band comes in, riders thrown in the dirt for the breakdown, getting up for the build, the ride
+for the drops, the open road for the outro. Effects (mushroom color) are seasoning, not the subject.
+Prefer archival home movies, public-domain films and amateur footage; skip official league
+channels (aggressive takedowns), stock sites (watermarks) and private people's faces.
+
+Long pieces (over about two minutes): add `DEMO_NO_APP=1`. Filming the app window holds every
+frame in memory (about 250 KB each, 20 a second); with it set, only the output is made. Run the
+render in the background; it takes the piece's length plus about a minute.
 | `set1`..`set3` | Song-to-song DJ sets with a loop roll into each drop |
 | `ours1`..`ours3` | The user's track with cartoon picture, with and without Peggy Gou |
 | `mix`, `decks`, `instrument`, `blend` | Captioned feature tours of the app (not what the user wants for posts) |
@@ -116,10 +142,30 @@ psychedelic color) is the example. Read it before writing a remix. The pieces:
   take them from `bars.js`, never guess; `beat.duck` is the sidechain pump on the decks (0.35 verse,
   0.55 drop); `beat.roll = { from, to }` a snare roll in bars; `riser(ctxTime, seconds)`; `beat.hats`
   scales the hats; `stopBeat()`.
-- **Lock the grid to the deck.** A video starts a little after `play()`, so a beat started on the
-  same event lands about 20 ms early. Every 2 bars set `beat.start` from the deck's `currentTime`
-  against the song bar's clip start (the `lock` helper in `shroomEdit`); corrections then stay within
-  a few ms. Check with `beat-phase.js`.
+- **Follow the record's own beats; never a fixed grid.** A record played by a live band drifts
+  (this one 138-142 BPM phrase to phrase). A fixed 139.7 grid, even re-locked to the deck every two
+  bars, measured 52 ms late in one drop and 26 ms early in another, and the user heard it. Track
+  the beats (`window.api.beats({ file, bpm })`, a few seconds, cached) and start the beat box in
+  follow mode: `startBeat({ follow: { deck, beats, down, offset: 0 }, ... })`, where `down` is the
+  index of the beat that starts bar 0 (bar numbers then match yours). Switch decks by assigning a
+  new `beat.follow`. Give the piece `timeOf(bar)` (ms from the start, from the tracked bars) so
+  drops, cuts and titles land on the band's bars too. `trackChips` in `rodeoEdit` shows the
+  mapping from the app's clip bars to tracked beats. Measure with `sync-check.js` after rendering.
+- **Known timing fault: a deck started partway through a piece is heard about 37 ms after the
+  position it reports** (a deck started with the piece is right, within 2 ms; swapping the decks'
+  roles moved the fault with the late start, not with the deck). `rodeoEdit` drops on such a deck
+  and its kick lands early there. Until it is fixed, play a follow-mode piece from one deck started
+  at bar 0, or measure the second deck with `sync-check.js` and set `beat.follow.offset` (+0.037).
+  A listening lock that correlated the deck's live sound with the tracked beats was tried and
+  wandered by tens of milliseconds on a dense band record; do not bring it back as it was.
+- **Levels: the beat is an addition, not a takeover.** Measured with `compare-mix.js`: the beat bus
+  at 0.9, pump depths of 0.45-0.6 and the record's bass at +4 dB took 5 dB of share from the record's
+  mids, and the user heard it as the added bass overwhelming the song. Now the beat bus is 0.5, pumps
+  0.12-0.3, the bass boost about +1 dB; verse bands land within 1 dB of the original.
+- **No synth bass under a band record unless the roots are certain.** Two root analyses agreed on
+  only half the bars of "Chips"; a wrong bass note sounds out of time even when it is on time. Boost
+  the record's own bass instead (`setDeckBass(deck, 1.3)`, about +4 dB; 1.5 is +6) and let the kick's
+  duck pump it.
 - **Build and drop:** `setDeckLowCut(0..1, seconds)` sweeps a low cut on the decks; take the kick out
   4 bars before the drop, roll and riser in, one beat of silence (deck `vol` 0), then everything on
   the one with `setDeckLowCut(0, 0.01)`.
@@ -131,6 +177,14 @@ psychedelic color) is the example. Read it before writing a remix. The pieces:
   intro hats at about 0.2. A riser at full level stood 17 dB out in the air band; 0.16 is right.
   Pick sections by the bar map: a pre-chorus that runs into the chorus gives a build and drop with
   no edit at all.
+
+**A full-song remix that keeps the lyrics** (`shroomFull`): play the record start to finish on
+one deck, never cut, and build the dance arrangement around it. Then no word can be lost to a wrong
+guess about where the singing is. Use `vocals.js` only to decide *where* the arrangement moves go:
+builds with the low cut, beats of silence and the biggest drop on instrumental runs; on sung bars
+keep the low cut open and put at most a snare roll before a drop. Bring the beat in and out by
+section (intro hats, verse groove, breakdowns with the drums out, drops with everything), and
+pin picture clips a few cuts ahead instead of all at once.
 
 Read `cut80s` before writing anything rhythmic; it shows sixteenth-note scheduling, gating the deck,
 juggling a bar, stabs and the echo-out.
@@ -200,8 +254,13 @@ the house-set style. They are different traditions; do not mix them in one short
    set `$('autoMode').value` (`hits` for songs, `equal` for picture, `sounds` for one-shots) and
    `$('autoLen').value` (`1` = whole song in one-bar clips, `0` = fill one page), `await autoCut()`,
    then `await window.api.save(state)`. Name picture clips so they can be found (`Wizard pic ...`).
-5. Build a contact sheet from the new clips' `.jpg` thumbnails, Read it, and note the indexes to
-   exclude (logos, credits, title cards, near-black). Put them in the `drop(...)` list in `reelFor`.
+5. Build a contact sheet with `node scripts/clip-sheet.js demo/extra-library <source id> <out.jpg>`
+   (three labeled frames per clip), Read it, and note the indexes to exclude (logos, credits, title
+   cards, banners, brand signs, watermarks, near-black). A sheet of first frames only is not enough:
+   "EVERY JULY" banners inside a newsreel clip got into a render that way.
+6. Picture clips must last as long as the cut they fill. A one-shot that ends early leaves the
+   viewer on the deck's own picture, which for a record is its cover art. `picturePlan` in the rodeo
+   pieces only deals clips long enough.
 
 ## Checking the app itself
 

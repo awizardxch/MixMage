@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   findSounds: (opts) => ipcRenderer.invoke('source:sounds', opts),
   level: (opts) => ipcRenderer.invoke('media:level', opts),
   bpm: (opts) => ipcRenderer.invoke('media:bpm', opts),
+  beats: (opts) => ipcRenderer.invoke('media:beats', opts),
   saveRecording: (bytes, title) => ipcRenderer.invoke('rec:save', bytes, title),
   removeRecording: (id) => ipcRenderer.invoke('rec:remove', id),
   audio: (clipId) => ipcRenderer.invoke('clip:audio', clipId),

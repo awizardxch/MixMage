@@ -381,159 +381,420 @@
   };
   const newSounds = () => state.pads.map((c, i) => (c && c.name.startsWith('New sound') && rt[i].buffer ? i : -1)).filter((i) => i >= 0);
 
-  // ---------- the shroom edit: a country-rock record turned into an EDM track ----------
-  // "Chips" by Choctaw Wildfire (139.7 BPM, C major; its YouTube video is only the cover). Played at its
-  // own tempo, so nothing is stretched. Song bars, from scripts/bars.js: 0-7 a quiet guitar intro,
-  // then a wall of sound; 112-119 a pre-chorus that runs straight into the chorus at 120-127
-  // (bass roots F F G C D G C Eb). The beat box (beat.js) adds the dance record; Shroom FX (fx.js)
-  // colors the picture; the black-and-white cowboy cartoon takes the rainbow too.
-  //   piece bars 0-7   the song's own intro; hats creep in at 4; growing fly agaric, light color
-  //   piece bars 8-15  verse with four on the floor, off-beat bass on the song's roots, a light pump
-  //   piece bars 16-23 the pre-chorus as the build: low cut rising, kick drops out at 20, snare roll
-  //                    and noise riser, one beat of silence, picture cutting faster, mirror on
-  //   piece bars 24-31 the chorus as the drop: everything in, hard pump, flashes, half-bar cuts
-  //   piece bar 32     the song rings out with one last kick
+  // ---------- "Chips" by Choctaw Wildfire as a dance record: the rodeo edit and the full mix ----------
+  // A traditional when-you're-down-get-back-up rodeo country song, played by a live band (139.7 BPM
+  // on average, drifting 138-142 from phrase to phrase), C major. Two pieces:
+  //   rodeoEdit  33 bars: the intro, verse with the groove, the pre-chorus as a build, the chorus as the drop
+  //   rodeoFull  the whole song, every lyric: the record plays uncut and the dance arrangement goes around it
+  // Timing: the record's beats are tracked (src/beats.js); the beat box plays on them (follow mode)
+  // and every scripted event lands on the record's own bars (`timeOf`), never on a fixed clock,
+  // which drifted up to 50 ms off the band. Low end: no synth bass line (its notes were guesses);
+  // the record's own bass is boosted in the drops and pumped by the kick, always in tune and in time.
+  // Picture tells the song: the dive bar and the night rodeo, trucks in the mud, cowboys, riders
+  // thrown into the dirt, getting back up, the ride, the open road. Mushrooms only glow in the
+  // breakdowns. Song sections (scripts/vocals.js with scripts/bars.js, in the app's bar numbers):
+  //   0-15 intro, band in | 16-31 sung | 32-39 instrumental | 40-71 sung | 72-87 instrumental |
+  //   88-119 sung | 120-135 instrumental | 136-167 sung | 168-183 mixed | 184-199 outro
   const CHIPS = 'diy32tpiipE';
-  const COWBOY = '5F0DyIlxT34'; // Whoops! I'm a Cowboy (1937)
-  const FUNGI = 'KaKMugW8Bqc'; // woodland fungi time-lapses (fly agaric, shaggy ink, earthstar)
-  const GROW = 'EF8nWF2GkXs'; // growing-mushroom compilation (mostly grow-kit boxes; close-ups only)
-  const NOTE = { C: 36, 'C#': 37, D: 38, 'D#': 39, E: 40, F: 41, 'F#': 42, G: 43, 'G#': 44, A: 45, 'A#': 46, B: 47 };
-  async function shroomEdit() {
-    const BPM = bpmOf(CHIPS, 139.7);
-    const song = byTime(padsOf(CHIPS));
-    if (song.length < 130) throw new Error(`"Chips" has ${song.length} bar clips; cut it whole in one-bar clips first`);
-    const pick = (list, keep) => keep.map((k) => list[k]).filter((i) => i != null);
-    const without = (list, bad) => list.filter((_, k) => !bad.includes(k));
-    // Dropped by eye from the thumbnail sheets: titles, credits, the "lesson" text cards, grow-kit boxes.
-    // The cartoon opens in an office (clips 2-14); the ranch (17 on) goes first, so the verse is cowboys.
-    const cowAll = byTime(padsOf(COWBOY));
-    const cowboy = [...without(cowAll, [0, 1, 15, 16, 22, 25, 27, 28]).filter((i) => cowAll.indexOf(i) >= 17), ...cowAll.slice(2, 15)];
-    const fungi = without(byTime(padsOf(FUNGI)), [0]);
-    const grow = pick(byTime(padsOf(GROW)), [5, 6, 12, 16, 17]);
-    const flyAgaric = fungi.filter((_, k) => k <= 6 || k >= 18); // the red caps
-    const oddFungi = fungi.filter((_, k) => k > 6 && k < 18); // shaggy ink and earthstars opening
-    const pics = [...cowboy, ...fungi, ...grow];
-    for (const i of pics) { state.pads[i].mode = 'oneshot'; state.pads[i].gain = 0; rt[i].pin = true; }
-    syncVideos();
-    await wait(1500);
-
-    // Bass roots per piece bar (the verse is song bars 8-15, the build 112-119, the drop 120-127).
-    const roots = [...Array(8).fill('C'), ...'G C G G C A G A'.split(' '), ...'D G F F C G D D#'.split(' '), ...'F F G C D G C D#'.split(' '), 'F'].map((n) => NOTE[n]);
-
-    const [A, B] = decks;
-    const cue = async (d, bar) => {
-      const s = state.sources.find((x) => x.id === CHIPS);
-      await loadDeck(d, { kind: 'source', title: s.title, url: s.url, file: s.file, bpm: BPM });
-      if (!d.video.duration) await new Promise((r) => d.video.addEventListener('loadedmetadata', r, { once: true }));
-      d.video.currentTime = state.pads[song[bar]].start;
-      d.rate = 1;
-      applyRate(d);
-      d.vol = 1;
-      d.q('vol').value = 1;
+  const sources = {
+    gallup: 'dIayNv1S9HU', // Gallup, NM, 1951 night rodeo (home movie)
+    reno: '2SV7jcq3ums', // Reno Rodeo, 1950s, restored
+    cowboy: '7dZUDluKtBw', // American Cowboy (1950), color
+    roadtrip: 'Ist-yZtDIWg', // old trucks road trip (trucks and land only; no faces)
+    k10: '89Yq_ezBOrg', // a Chevy K10 in the mud
+    neon: 'iKiAgbS6-6Y', // a beer neon sign
+    juke47: 'rIVFuYYfS7s', // 1947 Wurlitzer
+    juke56: 'RHuGWiTQ6Fg', // 1956 Wurlitzer
+    axford: 'nPN--7j5mdI', // fungi time-lapses (glowing accents)
+    glow: '-zXzhzEa1aQ', // glowing Mycena
+  };
+  // Kept by eye from the thumbnail sheets (indexes in time order): no credits, no watermarks, no
+  // near-black frames, no brand signs, no private people's faces.
+  const keep = {
+    gallup: [1, 2, 3, 8, 9, 10, 11, 13, 14, 15, 17, 22, 23, 26, 27, 28, 29, 31, 35, 36, 38],
+    fire: [39, 40, 41, 42, 43, 44, 45, 46].map((k) => ['gallup', k]),
+    // Reno clips 2 ("RENO Rodeo" poster), 6 and 9 ("JULY 4th", "EVERY JULY" banners) are text: out.
+    // Found on a sheet of three frames per clip; a first-frame sheet missed them.
+    bucking: [4, 5, 7, 8, 11, 14],
+    down: [10, 12, 13, 15],
+    grand: [0, 1, 3],
+    ranch: [0, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 31, 32, 33, 39, 40, 41],
+    faces: [11, 13, 27, 29, 42, 43, 44, 45, 47],
+    drive: [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62],
+    // Road trip vlog: only clips with no faces at any point (checked at 15/50/85% of each clip).
+    roadtrip: [5, 6, 11, 12, 25, 29, 30, 31, 32, 33, 34],
+    k10: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    neon: [0, 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15],
+    juke: [...Array.from({ length: 16 }, (_, k) => ['juke47', k]), ...[0, 4, 5, 10, 11, 14, 15].map((k) => ['juke56', k])],
+    // Fungi: only clips without the narrator's captions anywhere in them.
+    glow: [...[2, 10, 13, 15, 22, 23, 24, 26, 27, 28].map((k) => ['axford', k]), ['glow', 0]], // the Mycena tutorial subtitles its other glowing shots
+  };
+  const clipsOf = (id) => byTime(state.pads.map((c, i) => (c && c.sourceId === id ? i : -1)).filter((i) => i >= 0));
+  function rodeoPools() {
+    const by = {};
+    for (const [name, id] of Object.entries(sources)) by[name] = clipsOf(id);
+    const from = (src, list) => list.map((k) => (Array.isArray(k) ? by[k[0]][k[1]] : by[src][k])).filter((i) => i != null);
+    return {
+      nightRodeo: from('gallup', keep.gallup),
+      fire: from('gallup', keep.fire),
+      bucking: from('reno', keep.bucking),
+      down: from('reno', keep.down),
+      grand: from('reno', keep.grand),
+      ranch: from('cowboy', keep.ranch),
+      faces: from('cowboy', keep.faces),
+      drive: from('cowboy', keep.drive),
+      road: from('roadtrip', keep.roadtrip),
+      mud: from('k10', keep.k10),
+      neon: from('neon', keep.neon),
+      juke: from(null, keep.juke),
+      glow: from(null, keep.glow),
     };
-    await cue(A, 0);
-    await cue(B, 112);
+  }
+
+  // The record, tracked: beats plus the index of the beat that starts the app's bar `bar`.
+  async function trackChips() {
+    const s = state.sources.find((x) => x.id === CHIPS);
+    const song = byTime(padsOf(CHIPS));
+    if (song.length < 199) throw new Error(`"Chips" has ${song.length} bar clips; cut it whole in one-bar clips first`);
+    const tr = await window.api.beats({ file: s.file, bpm: s.bpm || 139.7 });
+    // Bar numbers follow the app's one-bar clips (the section map uses them): find the tracked beat
+    // at the start of clip-bar 8 and count back.
+    const at8 = state.pads[song[8]].start;
+    let i8 = 0;
+    tr.beats.forEach((t, i) => { if (Math.abs(t - at8) < Math.abs(tr.beats[i8] - at8)) i8 = i; });
+    const barIndex = i8 - 32; // beat index of bar 0 (may be negative; the grid is extended)
+    const barTime = (b) => followSongTime({ beats: tr.beats, down: barIndex }, b * 16); // song seconds of bar b (fractional)
+    return { s, song, tr, barIndex, barTime, snap: Math.abs(tr.beats[i8] - at8) };
+  }
+
+  async function cueChips(d, s, songTime) {
+    await loadDeck(d, { kind: 'source', title: s.title, url: s.url, file: s.file, bpm: s.bpm || 139.7 });
+    if (!d.video.duration) await new Promise((r) => d.video.addEventListener('loadedmetadata', r, { once: true }));
+    d.video.currentTime = songTime;
+    d.rate = 1;
+    applyRate(d);
+    d.vol = 1;
+    d.q('vol').value = 1;
+    d.loop = false;
+  }
+
+  // Picture cuts: `section(from, to, step, pools)` deals clips round robin from the named pools;
+  // a clip comes back only once its pool has been used up. Videos are pinned a few cuts ahead and
+  // let go after use.
+  function picturePlan(pools, barSeconds = 240 / 139.7) {
+    const pos = {};
+    // A clip must last as long as its cut: a one-shot that ends early leaves the viewer on the deck's
+    // own picture (for a record, its cover art), which flashed up in the first render.
+    const dur = (i) => state.pads[i].end - state.pads[i].start;
+    const take = (name, need) => {
+      const p = pools[name];
+      const k0 = pos[name] || 0;
+      for (let tries = 0; tries < p.length; tries++) {
+        const i = p[(k0 + tries) % p.length];
+        if (dur(i) >= need) { pos[name] = k0 + tries + 1; return i; }
+      }
+      throw new Error(`no clip in "${name}" lasts ${need.toFixed(1)} s`);
+    };
+    const cuts = [];
+    const section = (from, to, step, names, soft) => {
+      let k = 0;
+      for (let b = from; b < to - 0.001;) {
+        const s = typeof step === 'function' ? step(b) : step;
+        cuts.push([b, take(names[k++ % names.length], s * barSeconds + 0.4), soft ? 0.6 : 0.12]);
+        b += s;
+      }
+    };
+    const faster = (from, to) => (b) => (b < from + (to - from) / 2 ? 1 : b < to - 2 ? 0.5 : 0.25);
+    return { cuts, section, faster };
+  }
+  async function preparePictures(pools, first) {
+    for (const i of Object.values(pools).flat()) { state.pads[i].mode = 'oneshot'; state.pads[i].gain = 0; }
+    for (const i of first) rt[i].pin = true;
+    syncVideos();
+    await wait(2000);
+  }
+  function scheduleCuts(at, cuts) {
+    const AHEAD = 5;
+    let prev = null;
+    cuts.forEach(([b, i, blendS], k) => {
+      const was = prev;
+      at(b + 0.01, () => {
+        setBlend(blendS);
+        hit(i);
+        if (was != null && was !== i) {
+          stop(was);
+          if (!cuts.slice(k, k + AHEAD + 1).some(([, j]) => j === was)) setTimeout(() => { rt[was].pin = false; syncVideos(); }, 1200);
+        }
+        if (cuts[k + AHEAD]) { rt[cuts[k + AHEAD][1]].pin = true; syncVideos(); }
+      });
+      prev = i;
+    });
+  }
+
+  const FULL = { kick: true, clap: true, hat: true, closed: true, bass: false };
+  const NONE = { kick: false, clap: false, hat: false, closed: false, bass: false };
+
+  async function rodeoEdit() {
+    const { s, song, tr, barIndex, barTime, snap } = await trackChips();
+    const BPM = tr.bpm;
+    const pools = rodeoPools();
+    // Piece bars 0-15 are song bars 0-15 on deck A; 16-32 are song bars 112-128 on deck B
+    // (the pre-chorus runs straight into the chorus).
+    const [A, B] = window.__demoSwap ? [decks[1], decks[0]] : decks; // DEMO_SWAP=1 trades the decks' roles (a timing test)
+    await cueChips(A, s, barTime(0));
+    await cueChips(B, s, barTime(112));
     applyVolumes();
     setDeckLowCut(0);
-    setBlend(0.3);
-    select(pics[0]);
-
+    const songOfPiece = (b) => (b < 16 ? barTime(b) : barTime(112 + b - 16));
+    const t16 = (barTime(16) - barTime(0)) * 1000;
+    const timeOf = (b) => (b < 16 ? (barTime(b) - barTime(0)) * 1000 : t16 + (barTime(112 + b - 16) - barTime(112)) * 1000);
+    const { cuts, section, faster } = picturePlan(pools);
+    section(0, 8, 2, ['juke', 'nightRodeo', 'neon', 'nightRodeo'], true);
+    section(8, 16, 1, ['mud', 'ranch', 'faces', 'road']);
+    section(16, 24, faster(16, 24), ['down', 'bucking', 'glow']);
+    section(24, 33, 0.5, ['bucking', 'drive', 'fire', 'ranch', 'nightRodeo', 'grand']);
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    const follow = (d, songBar, pieceBar) => ({ deck: d, beats: tr.beats, down: barIndex + 4 * (songBar - pieceBar), offset: 0 });
     return {
-      bpm: BPM, bars: 33, keepDeckTime: true,
+      bpm: BPM, bars: 33, keepDeckTime: true, timeOf,
+      info: { tracked: tr.bpm, snapMs: Math.round(snap * 1000), chosen: tr.chosen },
       events(at) {
-        // Picture: a list of [bar, pad] cuts; each dissolves from the last.
-        const cuts = [];
-        const deal = (from, to, step, lists) => {
-          let k = 0;
-          const pos = lists.map(() => 0);
-          for (let b = from; b < to - 0.001; b += typeof step === 'function' ? step(b) : step) {
-            const li = k++ % lists.length;
-            const list = lists[li];
-            cuts.push([b, list[pos[li]++ % list.length]]);
-          }
-        };
-        deal(0, 8, 2, [flyAgaric]);
-        deal(8, 16, 1, [cowboy.slice(0, 12)]);
-        deal(16, 24, (b) => (b < 20 ? 1 : b < 22 ? 0.5 : 0.25), [cowboy.slice(12), oddFungi, grow]);
-        deal(24, 33, 0.5, [cowboy, flyAgaric, cowboy, grow]);
-        let prev = null;
-        for (const [b, i] of cuts) {
-          const was = prev;
-          at(b + 0.01, () => { setBlend(b < 8 ? 0.6 : b < 16 ? 0.22 : 0.06); hit(i); if (was != null && was !== i) stop(was); });
-          prev = i;
-        }
-
-        // The beat's bar grid follows where the deck really is (a video starts playing a little after
-        // it is told to): piece bar p is song bar p on deck A, song bar p + 96 on deck B.
-        const BAR = 240 / BPM;
-        const lock = (d, songBar, pieceBar) => () => {
-          if (!d.playing || d.video.paused || !beat.on) return;
-          const pieceTime = d.video.currentTime - state.pads[song[songBar]].start + pieceBar * BAR;
-          const before = beat.start;
-          beat.start = ctx.currentTime - pieceTime;
-          lockLog.push(Math.round((beat.start - before) * 1000)); // ms the grid moved
-        };
-        const lockLog = [];
-        at(32.9, () => console.log(`SHROOM_LOCK grid corrections (ms): ${lockLog.join(' ')}`));
-        for (let b = 0.25; b < 16; b += 2) at(b, lock(A, 0, 0));
-        for (let b = 16.25; b < 32; b += 2) at(b, lock(B, 112, 16));
-
-        // Sound.
+        scheduleCuts(at, cuts);
         at(0, () => {
-          fade(0);
+          fade(A.idx);
           setDeckPlaying(A, true);
-          startBeat({ bpm: BPM, roots, duck: 0, parts: { kick: false, clap: false, hat: false, closed: false, bass: false } });
+          startBeat({ bpm: BPM, duck: 0, parts: NONE, follow: follow(A, 0, 0) });
+          beat.hats = 0.18;
           Object.assign(fx, { mode: 'shroom', amount: 0.3, trails: 0.35, beat: 0, spin: 0.4, bpm: BPM, t0: performance.now() / 1000 });
-          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire · Mixmage shroom edit' });
+          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire · Mixmage rodeo edit' });
         });
-        // Measured: the song's intro is 7-12 dB short of highs, so full hats stood 7-10 dB out over it,
-        // and 0.4 still 8 dB. A whisper creeping in.
-        at(4, () => { beat.hats = 0.18; setBeatParts({ closed: true }); fx.amount = 0.45; });
+        at(4, () => setBeatParts({ closed: true }));
         at(6, () => { setBeatParts({ hat: true }); setOutputTitle(null); });
-        at(8, () => { beat.hats = 1; setBeatParts({ kick: true, bass: true }); beat.duck = 0.35; Object.assign(fx, { amount: 0.65, beat: 0.5, spin: 0.7, trails: 0.45 }); });
+        at(8, () => { beat.hats = 1; beat.duck = 0.15; setBeatParts({ kick: true }); Object.assign(fx, { amount: 0.6, beat: 0.5, spin: 0.7, trails: 0.45 }); });
         at(12, () => setBeatParts({ clap: true }));
-        // The build.
+        // The build: deck B takes over on the pre-chorus; the beat follows it from here.
         at(16, () => {
-          fade(1);
+          fade(B.idx);
           setDeckPlaying(B, true);
           setDeckPlaying(A, false);
-          setBeatParts({ bass: false, clap: false });
-          beat.duck = 0.25;
+          console.log('EAR deckA ' + JSON.stringify({ ear: beat.follow && Math.round((beat.follow.ear || 0) * 1000), steps: beat.follow && beat.follow.earLog }));
+          beat.follow = follow(B, 112, 16);
+          setBeatParts({ clap: false });
+          beat.duck = 0.12;
           beat.roll = { from: 20, to: 24 };
-          Object.assign(fx, { mode: 'mirror', amount: 0.7, spin: 1 });
+          fx.mode = 'mirror';
         });
-        for (let s = 0; s <= 32; s++) at(16 + (s / 32) * 7.75, () => { setDeckLowCut(0.75 * (s / 32) ** 1.6, 0.25); fx.amount = 0.7 + 0.3 * (s / 32); fx.spin = 1 + 2 * (s / 32); fx.trails = 0.45 + 0.35 * (s / 32); });
-        at(20, () => { setBeatParts({ kick: false, hat: false, closed: false }); riser(ctx.currentTime, 4 * (240 / BPM) - 0.05); });
-        at(23.75, () => { B.vol = 0; applyVolumes(); }); // one beat of silence before the drop
-        // The drop.
+        for (let k = 0; k <= 32; k++) at(16 + (k / 32) * 7.75, () => { setDeckLowCut(0.75 * (k / 32) ** 1.6, 0.25); fx.amount = 0.65 + 0.35 * (k / 32); fx.spin = 1 + 2 * (k / 32); fx.trails = 0.45 + 0.35 * (k / 32); });
+        at(20, () => { setBeatParts({ kick: false, hat: false, closed: false }); riser(ctx.currentTime, (songOfPiece(24) - songOfPiece(20)) - 0.05); });
+        at(23.75, () => { B.vol = 0; applyVolumes(); });
         at(24, () => {
           setDeckLowCut(0, 0.01);
           B.vol = 1;
           applyVolumes();
+          setDeckBass(B, 1.08); // the record's own bass, up about 1 dB, pumped by the kick
           beat.roll = null;
-          beat.duck = 0.55;
-          setBeatParts({ kick: true, clap: true, hat: true, closed: true, bass: true });
+          beat.duck = 0.3;
+          setBeatParts(FULL);
           Object.assign(fx, { amount: 1, beat: 1, spin: 1.6, trails: 0.6 });
           fxFlash();
         });
         at(28, () => { fx.mode = 'shroom'; fxFlash(); });
         at(30, () => { fx.mode = 'mirror'; });
-        // The end: the song rings out over one bar with a last kick.
         at(32, () => {
-          setBeatParts({ clap: false, hat: false, closed: false, bass: false });
+          setBeatParts({ ...NONE, kick: true });
+          setDeckBass(B, 1);
           fxFlash();
           setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire', center: true });
         });
-        at(32.02, () => setBeatParts({ kick: false }));
-        for (let s = 0; s <= 24; s++) at(32 + s / 24, () => { B.vol = 1 - s / 24; applyVolumes(); fx.amount = 1 - 0.5 * (s / 24); });
-        at(32.98, () => { stopBeat(); });
+        at(32.1, () => setBeatParts(NONE));
+        for (let k = 0; k <= 24; k++) at(32 + k / 24, () => { B.vol = 1 - k / 24; applyVolumes(); fx.amount = 1 - 0.5 * (k / 24); });
+        at(32.9, () => console.log('EAR deckB ' + JSON.stringify({ ear: beat.follow && Math.round((beat.follow.ear || 0) * 1000), steps: beat.follow && beat.follow.earLog })));
+        at(32.97, () => stopBeat());
+      },
+    };
+  }
+
+  async function rodeoFull() {
+    const { s, tr, barIndex, barTime, snap } = await trackChips();
+    const BPM = tr.bpm;
+    const pools = rodeoPools();
+    const A = decks[0];
+    await cueChips(A, s, barTime(0));
+    applyVolumes();
+    setDeckLowCut(0);
+    const timeOf = (b) => (barTime(b) - barTime(0)) * 1000;
+    const { cuts, section, faster } = picturePlan(pools);
+    section(0, 8, 2, ['juke', 'nightRodeo', 'neon', 'nightRodeo'], true); // the bar and the arena lights
+    section(8, 16, 1, ['mud', 'road', 'mud', 'ranch']); // the old truck
+    section(16, 32, 2, ['faces', 'ranch', 'road', 'ranch']); // cowboy life under verse one
+    section(32, 40, faster(32, 40), ['bucking', 'nightRodeo']); // the first build: the buckers
+    section(40, 72, 1, ['bucking', 'ranch', 'nightRodeo', 'drive', 'faces', 'grand']);
+    section(72, 80, 2, ['down', 'glow', 'down', 'nightRodeo'], true); // the chips are down: thrown into the dirt
+    section(80, 88, faster(80, 88), ['mud', 'bucking', 'faces']); // getting back up
+    section(88, 120, 1, ['bucking', 'drive', 'road', 'nightRodeo', 'ranch', 'faces']);
+    section(120, 136, 0.5, ['fire', 'bucking', 'fire', 'drive', 'nightRodeo', 'mud']); // the big drop
+    section(136, 144, 2, ['juke', 'neon', 'glow', 'juke'], true); // back in the dive bar
+    section(144, 152, faster(144, 152), ['mud', 'road', 'bucking']);
+    section(152, 168, 1, ['bucking', 'drive', 'grand', 'ranch', 'nightRodeo', 'faces']);
+    section(168, 184, 0.5, ['drive', 'bucking', 'fire', 'ranch', 'mud', 'grand']);
+    section(184, 200, 2, ['drive', 'road', 'neon', 'juke'], true); // the open road home
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    const BAR = (b) => (barTime(b + 1) - barTime(b)) * 0.999; // a bar's length in seconds, here
+    return {
+      bpm: BPM, bars: 200, keepDeckTime: true, timeOf,
+      info: { tracked: tr.bpm, snapMs: Math.round(snap * 1000), chosen: tr.chosen },
+      events(at) {
+        scheduleCuts(at, cuts);
+        const look = (o) => () => Object.assign(fx, o);
+        const sweep = (from, to, a, b) => { for (let k = 0; k <= 24; k++) at(from + ((to - from) * k) / 24, () => setDeckLowCut(a + (b - a) * (k / 24) ** 1.6, 0.25)); };
+        const riseTo = (from, to) => riser(ctx.currentTime, barTime(to) - barTime(from) - 0.05);
+        const build = (from, to, { gap }) => {
+          at(from, () => { fx.mode = 'mirror'; });
+          const mid = from + (to - from) / 2;
+          at(mid, () => { setBeatParts({ kick: false, hat: false, clap: false }); beat.roll = { from: mid, to }; riseTo(mid, to); });
+          for (let k = 0; k <= 16; k++) at(from + ((to - from) * k) / 16, () => { fx.amount = 0.65 + 0.35 * (k / 16); fx.spin = 0.8 + 2.2 * (k / 16); fx.trails = 0.45 + 0.35 * (k / 16); });
+          if (gap) at(to - 0.25, () => { A.vol = 0; applyVolumes(); });
+        };
+        const drop = (bar, o) => at(bar, () => {
+          A.vol = 1;
+          applyVolumes();
+          setDeckLowCut(0, 0.01);
+          setDeckBass(A, o.bass || 1.08);
+          beat.roll = null;
+          beat.duck = o.duck;
+          setBeatParts(FULL);
+          Object.assign(fx, { mode: o.mode || 'shroom', amount: o.amount, beat: o.beat, spin: 1.2, trails: 0.55 });
+          fxFlash();
+        });
+        const lull = (bar, o) => at(bar, () => { setBeatParts({ ...NONE, ...o.parts }); beat.hats = 0.5; beat.duck = 0; setDeckBass(A, 1); Object.assign(fx, { mode: 'shroom', amount: o.amount, beat: 0.15, spin: 0.3, trails: 0.8 }); });
+
+        // Intro and band-in (0-15)
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          startBeat({ bpm: BPM, duck: 0, parts: NONE, follow: { deck: A, beats: tr.beats, down: barIndex, offset: 0 } });
+          beat.hats = 0.18;
+          Object.assign(fx, { mode: 'shroom', amount: 0.3, trails: 0.35, beat: 0, spin: 0.4, bpm: BPM, t0: performance.now() / 1000 });
+          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire · Mixmage rodeo mix' });
+        });
+        at(4, () => setBeatParts({ closed: true }));
+        at(6, () => { setBeatParts({ hat: true }); setOutputTitle(null); });
+        at(8, () => { beat.hats = 1; beat.duck = 0.15; setBeatParts({ kick: true }); look({ amount: 0.55, beat: 0.5, spin: 0.7, trails: 0.45 })(); fxFlash(); });
+        // Verse one (16-31): the groove under the voice
+        at(16, look({ amount: 0.6, beat: 0.4 }));
+        at(24, () => setBeatParts({ clap: true }));
+        // Instrumental turnaround (32-39): the first build, one beat of silence
+        sweep(32, 39.75, 0, 0.7);
+        build(32, 40, { gap: true });
+        drop(40, { duck: 0.22, amount: 0.85, beat: 0.8 }); // sung (40-71)
+        at(56, () => fxFlash());
+        // Instrumental (72-87): the breakdown, then the second build
+        lull(72, { parts: { hat: true }, amount: 0.6 });
+        at(72, () => setDeckLowCut(0.35, 2 * BAR(72)));
+        at(80, () => { beat.hats = 1; beat.duck = 0.15; setBeatParts({ kick: true, closed: true }); });
+        sweep(80, 87.75, 0.35, 0.75);
+        build(80, 88, { gap: true });
+        drop(88, { duck: 0.25, amount: 0.9, beat: 0.9 }); // sung (88-119)
+        at(104, look({ mode: 'mirror' }));
+        at(112, look({ mode: 'shroom' }));
+        at(116, () => { beat.roll = { from: 116, to: 120 }; riseTo(116, 120); }); // sung: a roll, no silence
+        drop(120, { duck: 0.3, amount: 1, beat: 1, mode: 'mirror', bass: 1.12 }); // instrumental: the big drop
+        for (const b of [124, 128, 132]) at(b, () => { fxFlash(); fx.mode = fx.mode === 'mirror' ? 'shroom' : 'mirror'; });
+        // Sung (136-151): a quiet breakdown in the bar, then the third build (low cut stays open)
+        lull(136, { parts: { closed: true }, amount: 0.5 });
+        at(144, () => { beat.hats = 1; beat.duck = 0.15; setBeatParts({ kick: true, hat: true }); });
+        at(148, () => { beat.roll = { from: 148, to: 152 }; riseTo(148, 152); fx.mode = 'mirror'; });
+        for (let k = 0; k <= 16; k++) at(144 + k / 2, () => { fx.amount = 0.6 + 0.4 * (k / 16); fx.spin = 0.6 + 2 * (k / 16); });
+        drop(152, { duck: 0.28, amount: 1, beat: 1 }); // the final drop (152-183)
+        for (const b of [160, 168, 176]) at(b, () => { fxFlash(); fx.mode = fx.mode === 'mirror' ? 'shroom' : 'mirror'; });
+        // Outro (184-199): the beat strips away and the record ends on its own chord
+        at(184, () => { setBeatParts({ clap: false }); beat.duck = 0.18; setDeckBass(A, 1.04); Object.assign(fx, { mode: 'shroom', amount: 0.8, beat: 0.6, spin: 0.6 }); });
+        at(188, () => { setBeatParts({ hat: false }); setDeckBass(A, 1); });
+        at(190, () => setBeatParts({ closed: false }));
+        at(192, () => { setBeatParts(NONE); beat.duck = 0; fxFlash(); });
+        for (let k = 0; k <= 16; k++) at(192 + k / 2, () => { fx.amount = 0.8 - 0.5 * (k / 16); fx.spin = 0.6 - 0.4 * (k / 16); });
+        at(194, () => setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire · Mixmage rodeo mix', center: true }));
+        for (const b of [40, 88, 120, 152, 192]) at(b - 0.05, () => console.log('EAR bar' + b + ' ' + JSON.stringify({ ear: beat.follow && Math.round((beat.follow.ear || 0) * 1000), steps: beat.follow && beat.follow.earLog })));
+        at(199.9, () => stopBeat());
+      },
+    };
+  }
+
+  // The music video: "Chips" exactly as recorded, start to finish, with the rodeo story cut to its
+  // bars and Shroom FX breathing on the band's tracked beats. Nothing is added to the sound; after the
+  // render, scripts/original-audio.js replaces the recorded sound with the original file's, lined up
+  // to the millisecond (the app's output passes its limiter, which would squash a mastered record).
+  async function rodeoVideo() {
+    const { s, tr, barTime, snap } = await trackChips();
+    const pools = rodeoPools();
+    const A = decks[0];
+    await cueChips(A, s, barTime(0));
+    applyVolumes();
+    setDeckLowCut(0);
+    setDeckBass(A, 1);
+    const timeOf = (b) => (barTime(b) - barTime(0)) * 1000;
+    const { cuts, section, faster } = picturePlan(pools);
+    section(0, 8, 2, ['juke', 'nightRodeo', 'neon', 'nightRodeo'], true); // the bar and the arena lights
+    section(8, 16, 1, ['mud', 'road', 'mud', 'ranch']); // the old truck as the band comes in
+    section(16, 32, 2, ['faces', 'ranch', 'road', 'ranch']); // cowboy life under verse one
+    section(32, 40, faster(32, 40), ['bucking', 'nightRodeo']); // the buckers
+    section(40, 72, 1, ['bucking', 'ranch', 'nightRodeo', 'drive', 'faces', 'grand']);
+    section(72, 80, 2, ['down', 'glow', 'down', 'nightRodeo'], true); // the chips are down: thrown into the dirt
+    section(80, 88, faster(80, 88), ['mud', 'bucking', 'faces']); // getting back up
+    section(88, 120, 1, ['bucking', 'drive', 'road', 'nightRodeo', 'ranch', 'faces']);
+    section(120, 136, 0.5, ['fire', 'bucking', 'fire', 'drive', 'nightRodeo', 'mud']); // the band lets loose
+    section(136, 144, 2, ['juke', 'neon', 'glow', 'juke'], true); // back in the dive bar
+    section(144, 152, faster(144, 152), ['mud', 'road', 'bucking']);
+    section(152, 168, 1, ['bucking', 'drive', 'grand', 'ranch', 'nightRodeo', 'faces']);
+    section(168, 184, 0.5, ['drive', 'bucking', 'fire', 'ranch', 'mud', 'grand']);
+    section(184, 200, 2, ['drive', 'road', 'neon', 'juke'], true); // the open road home
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm: tr.bpm, bars: 200, keepDeckTime: true, timeOf,
+      info: { tracked: tr.bpm, snapMs: Math.round(snap * 1000), chosen: tr.chosen },
+      events(at) {
+        scheduleCuts(at, cuts);
+        const look = (o, flash) => () => { Object.assign(fx, o); if (flash) fxFlash(); };
+        const ramp = (from, to, a, b) => { for (let k = 0; k <= 16; k++) at(from + ((to - from) * k) / 16, () => { fx.amount = a + (b - a) * (k / 16); fx.spin = 0.4 + 1.4 * (k / 16); }); };
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { mode: 'shroom', amount: 0.25, trails: 0.35, beat: 0.15, spin: 0.35, bpm: tr.bpm, follow: { deck: A, beats: tr.beats } });
+          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire' });
+        });
+        at(6, () => setOutputTitle(null));
+        at(8, look({ amount: 0.45, beat: 0.35, spin: 0.55, trails: 0.45 }, true)); // the band comes in
+        at(16, look({ amount: 0.4, beat: 0.3 })); // verse one
+        at(32, look({ mode: 'mirror', amount: 0.65, beat: 0.6, spin: 1.2 })); // instrumental
+        at(40, look({ mode: 'shroom', amount: 0.6, beat: 0.6, spin: 0.9 }, true));
+        at(72, look({ mode: 'shroom', amount: 0.45, beat: 0.2, spin: 0.3, trails: 0.75 })); // down in the dirt
+        ramp(80, 88, 0.45, 0.85); // getting up
+        at(84, look({ mode: 'mirror' }));
+        at(88, look({ mode: 'shroom', amount: 0.7, beat: 0.7, spin: 1, trails: 0.5 }, true));
+        at(104, look({ mode: 'mirror' }));
+        at(112, look({ mode: 'shroom' }));
+        at(120, look({ mode: 'mirror', amount: 1, beat: 1, spin: 1.5, trails: 0.6 }, true)); // the band lets loose
+        for (const b of [124, 128, 132]) at(b, () => { fxFlash(); fx.mode = fx.mode === 'mirror' ? 'shroom' : 'mirror'; });
+        at(136, look({ mode: 'shroom', amount: 0.45, beat: 0.2, spin: 0.3, trails: 0.8 })); // the dive bar
+        ramp(144, 152, 0.45, 0.85);
+        at(148, look({ mode: 'mirror' }));
+        at(152, look({ mode: 'shroom', amount: 0.9, beat: 0.9, spin: 1.2, trails: 0.55 }, true)); // last chorus
+        for (const b of [160, 168, 176]) at(b, () => { fxFlash(); fx.mode = fx.mode === 'mirror' ? 'shroom' : 'mirror'; });
+        at(184, look({ mode: 'shroom', amount: 0.6, beat: 0.4, spin: 0.4 })); // the road home
+        for (let k = 0; k <= 16; k++) at(192 + k / 2, () => { fx.amount = 0.6 - 0.35 * (k / 16); });
+        at(194, () => setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire', center: true }));
       },
     };
   }
 
   // ---------- variants ----------
   const variants = {
-    shroomEdit,
+    rodeoVideo,
+    rodeoEdit,
+    rodeoFull,
     promo,
     cut80s,
     // 80s cut on "Mothership", Felix/Betty sounds as the stabs and scratch, swap titles.
@@ -801,7 +1062,7 @@
     if (!run.keepDeckTime) for (const d of decks) d.video.currentTime = 0;
     const name = (i) => `${state.pads[i].name} (p${pageOf(i) + 1})`;
     return {
-      variant, bpm: run.bpm, bars: run.bars, loaded: rt.filter((r) => r.buffer).length, of: want, pages: pageCount(),
+      variant, bpm: run.bpm, bars: run.bars, info: run.info, loaded: rt.filter((r) => r.buffer).length, of: want, pages: pageCount(),
       tempos: { td: L.tdBpm, gold: L.goldBpm, pg: L.pgBpm }, td: L.td.map(name), pg: L.pg.map(name), rr: L.rr.map(name),
       rrTone: name(L.rrTone), rrRoot: L.rrRoot, levels: [L.td[0], L.gold[0], L.pp[0], L.pg[0], L.rr[0]].map((i) => +(20 * Math.log10(rt[i].level.norm)).toFixed(1)),
     };
@@ -809,9 +1070,12 @@
 
   window.__demoRun = async () => {
     const BAR = 240000 / run.bpm;
+    // A piece over a live-played record gives `timeOf(bars)` (ms from the start), taken from the
+    // record's tracked beats, so its events land on the band's bars, not on a fixed clock.
+    const tOf = run.timeOf || ((bars) => bars * BAR);
     const ev = [];
-    run.events((bars, fn) => ev.push({ t: bars * BAR, fn }));
-    ev.push({ t: run.bars * BAR, fn: () => { stopAll(); for (const d of decks) setDeckPlaying(d, false); } });
+    run.events((bars, fn) => ev.push({ t: tOf(bars), fn }));
+    ev.push({ t: tOf(run.bars), fn: () => { stopAll(); for (const d of decks) setDeckPlaying(d, false); } });
     ev.sort((x, y) => x.t - y.t);
 
     await toggleOutputRec();

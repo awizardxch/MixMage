@@ -53,11 +53,12 @@ function tapElement(el) {
   return gain;
 }
 
-// Deck bass: 1 = full, 0 = cut (about -36 dB below 180 Hz).
+// Deck bass: 1 = full, 0 = cut (about -36 dB below 180 Hz). Above 1 boosts the record's own bass
+// (1.5 = +6 dB): the low end of a dance version that is always in tune and in time, being the record.
 function setDeckBass(d, v) {
-  d.bass = Math.max(0, Math.min(1, v));
-  d.gain.bass.gain.setTargetAtTime(-36 * (1 - d.bass), ctx.currentTime, 0.03);
-  d.q('bass').value = d.bass;
+  d.bass = Math.max(0, Math.min(1.5, v));
+  d.gain.bass.gain.setTargetAtTime(d.bass <= 1 ? -36 * (1 - d.bass) : 12 * (d.bass - 1), ctx.currentTime, 0.03);
+  d.q('bass').value = Math.min(1, d.bass);
 }
 tapElement(srcVideo);
 

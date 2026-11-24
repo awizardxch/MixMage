@@ -15,6 +15,7 @@ const fx = {
   beat: 0.6, // 0..1, how hard each beat pulses
   flashAt: -1, // a one-off flash (a drop)
   spin: 1, // how fast the colors travel
+  follow: null, // { deck, beats }: pulse on a record's tracked beats (see fxPaint)
 };
 const fxPrev = new WeakMap(); // canvas -> its previous frame, for trails
 
@@ -36,7 +37,20 @@ function fxPaint(g, canvas, layers) {
   const now = performance.now() / 1000;
   const a = fx.amount;
   const beatLen = 60 / fxTempo();
-  const phase = ((((now - fx.t0) / beatLen) % 1) + 1) % 1;
+  let phase = ((((now - fx.t0) / beatLen) % 1) + 1) % 1;
+  // `fx.follow = { deck, beats }`: pulse on a record's tracked beats (src/beats.js), so the picture
+  // breathes with a live band whose tempo moves, instead of drifting off it on a fixed clock.
+  const fl = fx.follow;
+  if (fl && fl.deck && fl.deck.video && fl.beats && fl.beats.length > 1) {
+    const t = fl.deck.video.currentTime;
+    const B = fl.beats;
+    let lo = 0;
+    let hi = B.length - 1;
+    if (t >= B[0] && t < B[hi]) {
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (B[mid] <= t) lo = mid; else hi = mid; }
+      phase = (t - B[lo]) / (B[lo + 1] - B[lo]);
+    }
+  }
   const pulse = fx.beat * Math.pow(1 - phase, 4); // sharp on the beat, gone by the off-beat
   const flash = fx.flashAt >= 0 ? Math.max(0, 1 - (now - fx.flashAt) / (beatLen * 2)) : 0;
   const hue = (now * 55 * fx.spin) % 360;

@@ -9,7 +9,9 @@
 // Each kick ducks the decks (`deckBus` in decks.js) and comes back over most of a beat: the sidechain
 // pump. Everything goes to the limiter, so it is heard, recorded in "Record output", and level-safe.
 const beatBus = ctx.createGain();
-beatBus.gain.value = 0.9;
+// Measured against the original record (scripts/compare-mix.js): at 0.9 the kit and the pump took
+// about 5 dB of share from the record's mids (its voice and guitars). The beat is an addition.
+beatBus.gain.value = 0.5;
 beatBus.connect(limiter);
 
 const beat = {
@@ -23,6 +25,11 @@ const beat = {
   roll: null, // { from, to } in bars, a snare roll
   nextStep: 0, // next sixteenth to schedule, counted from `start`
   timer: null,
+  // Follow mode: play on a record's own tracked beats (src/beats.js) instead of a fixed grid, so the
+  // beat stays with a live drummer. { deck, beats: [song seconds], down: index in `beats` of bar 0's
+  // first beat (may be negative; the grid is extended at either end), offset: seconds added to every
+  // hit, m: smoothed audio-clock minus song-time, next: next sixteenth }.
+  follow: null,
 };
 
 let noiseBuf = null;
@@ -127,14 +134,15 @@ function riser(t, seconds) {
 
 function scheduleStep(n, t) {
   const p = beat.parts;
-  const step = n % 16; // sixteenth in the bar
+  const step = ((n % 16) + 16) % 16; // sixteenth in the bar
   const bar = Math.floor(n / 16);
   const sixteenth = 15 / beat.bpm;
   if (p.kick && step % 4 === 0) kickAt(t);
   if (p.clap && (step === 4 || step === 12)) clapAt(t);
   if (p.hat && step % 4 === 2) hatAt(t, true);
   if (p.closed && step % 2 === 1) hatAt(t, false);
-  if (p.bass && beat.roots.length && step % 4 === 2) bassAt(t, beat.roots[bar % beat.roots.length], sixteenth * 1.7);
+  const root = beat.follow ? beat.roots[bar] : beat.roots[bar % (beat.roots.length || 1)];
+  if (p.bass && root != null && step % 4 === 2) bassAt(t, root, sixteenth * 1.7); // null = rest (an unsure bar)
   const r = beat.roll;
   if (r && n / 16 >= r.from && n / 16 < r.to) {
     const prog = (n / 16 - r.from) / (r.to - r.from);
@@ -144,8 +152,49 @@ function scheduleStep(n, t) {
   }
 }
 
+// The song time of sixteenth n in follow mode: between the two tracked beats it falls between.
+function followSongTime(f, n) {
+  const B = f.beats;
+  const q = Math.floor(n / 4);
+  const i = f.down + q;
+  const frac = (n - 4 * q) / 4;
+  const at = (k) => {
+    if (k < 0) return B[0] + k * (B[1] - B[0]);
+    if (k >= B.length) return B[B.length - 1] + (k - B.length + 1) * (B[B.length - 1] - B[B.length - 2]);
+    return B[k];
+  };
+  return at(i) + frac * (at(i + 1) - at(i));
+}
+
+// Follow mode: map the record's song time to the audio clock through the deck's live position.
+// The mapping is smoothed (a slow phase lock, as DJ software syncs to a playing deck) so the
+// coarse steps of a video's currentTime do not jitter the hits; a jump (a seek, a new deck) resets it.
+function followTick() {
+  const f = beat.follow;
+  const v = f.deck.video;
+  if (!f.deck.playing || v.paused || v.seeking) { f.next = null; return; }
+  const rate = v.playbackRate || 1;
+  const m = ctx.currentTime - v.currentTime / rate;
+  if (f.m == null || Math.abs(m - f.m) > 0.06) { f.m = m; f.next = null; } else f.m += 0.04 * (m - f.m);
+  const now = v.currentTime;
+  if (f.next == null) {
+    // The first sixteenth at or after the deck's position.
+    let n = Math.floor(((now - f.beats[0]) / ((f.beats[f.beats.length - 1] - f.beats[0]) / (f.beats.length - 1)) - f.down) * 4) - 8;
+    while (followSongTime(f, n) < now - 0.002) n++;
+    f.next = n;
+  }
+  for (;;) {
+    const s = followSongTime(f, f.next);
+    const t = f.m + s / rate + (f.offset || 0);
+    if (t > ctx.currentTime + 0.12) break;
+    if (t >= ctx.currentTime - 0.005) scheduleStep(f.next, t);
+    f.next++;
+  }
+}
+
 function beatTick() {
   if (!beat.on) return;
+  if (beat.follow) return followTick();
   const sixteenth = 15 / beat.bpm;
   const horizon = ctx.currentTime + 0.15;
   for (;;) {
@@ -159,6 +208,7 @@ function beatTick() {
 // Starts the beat with bar 0 on `at` (ctx time; default now). Options override `beat` fields.
 function startBeat(opts = {}) {
   Object.assign(beat, opts, { parts: { ...beat.parts, ...(opts.parts || {}) } });
+  if (!('follow' in opts)) beat.follow = null;
   beat.start = opts.at != null ? opts.at : ctx.currentTime + 0.02;
   beat.nextStep = 0;
   beat.on = true;
@@ -170,6 +220,7 @@ function setBeatParts(parts) { Object.assign(beat.parts, parts); }
 
 function stopBeat() {
   beat.on = false;
+  beat.follow = null;
   deckBus.gain.cancelScheduledValues(ctx.currentTime);
   deckBus.gain.setTargetAtTime(1, ctx.currentTime, 0.02);
 }
@@ -180,12 +231,31 @@ function beatBar() { return beat.on ? (ctx.currentTime - beat.start) / (240 / be
 // The mixer's controls: Beat toggles a full beat at the playing deck's tempo (bar 0 = the press);
 // Lo cut sweeps the decks' low cut.
 function initBeat() {
-  $('beatBtn').addEventListener('click', () => {
-    if (beat.on) { stopBeat(); $('beatBtn').classList.remove('on'); return; }
-    const d = decks.find((x) => x.playing && x.item && x.item.bpm);
-    const bpm = d ? d.item.bpm * (d.video.playbackRate || 1) : 128;
-    startBeat({ bpm, parts: { kick: true, clap: true, hat: true, closed: true, bass: false } });
-    $('beatBtn').classList.add('on');
+  const btn = $('beatBtn');
+  btn.addEventListener('click', async () => {
+    if (beat.on) { stopBeat(); btn.classList.remove('on'); return; }
+    const parts = { kick: true, clap: true, hat: true, closed: true, bass: false };
+    const d = decks.find((x) => x.playing && x.item);
+    // A record on a deck: track its beats (once; a few seconds) and play on them, so the beat stays
+    // with the band even where its tempo moves. Anything else: a fixed grid from the press.
+    if (d && d.item.file && d.item.kind !== 'rec') {
+      btn.textContent = 'Tracking…';
+      btn.disabled = true;
+      try {
+        const tr = await window.api.beats({ file: d.item.file, bpm: d.item.bpm || 120 });
+        startBeat({ bpm: tr.bpm * (d.video.playbackRate || 1), parts, follow: { deck: d, beats: tr.beats, down: tr.downbeat, offset: 0 } });
+      } catch (e) {
+        toast(`Beat tracking failed (${e.message}); playing a fixed grid.`);
+        startBeat({ bpm: (d.item.bpm || 128) * (d.video.playbackRate || 1), parts });
+      } finally {
+        btn.textContent = 'Beat';
+        btn.disabled = false;
+      }
+    } else {
+      const bpm = d && d.item.bpm ? d.item.bpm * (d.video.playbackRate || 1) : 128;
+      startBeat({ bpm, parts });
+    }
+    btn.classList.add('on');
   });
   $('lowCut').addEventListener('input', (e) => setDeckLowCut(Number(e.target.value)));
   $('lowCut').addEventListener('dblclick', () => { $('lowCut').value = 0; setDeckLowCut(0); });

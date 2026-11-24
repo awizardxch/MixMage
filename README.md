@@ -17,8 +17,9 @@ It is the digital, AI-era take on 1980s turntable mixing and sampling.
   across sources, and a limiter on the output.
 - **Two decks and a mixer.** BPM detection and sync, an equal-power crossfader, and a bass control
   for blends and bass cuts.
-- **Beat box.** A synthesized 909-style kit (kick, clap, hats, off-beat bass) at the deck's tempo,
-  pumping the decks on every kick, plus a low-cut sweep for builds.
+- **Beat box.** A synthesized 909-style kit (kick, clap, hats, off-beat bass) that follows the playing
+  record's own tracked beats, so it stays with a live drummer, pumping the decks on every kick, plus a
+  low-cut sweep for builds.
 - **One viewer.** Shows whatever is playing, with dissolves between clips.
 - **Shroom FX.** Psychedelic color, kaleidoscope mirror and trails that pulse on the beat; it colors
   black-and-white footage too, and records into the output.
@@ -47,6 +48,17 @@ These measure a mix when you cannot listen to it, so a script or an agent can ch
 - `node scripts/captions.js <video id> [from] [to]`: prints a video's captions with times.
 - `node scripts/key.js <file>`: the song's key and strongest bass notes.
 - `node scripts/bars.js <library> <source id>`: each bar's root note and level, to read a song's form.
+- `node scripts/vocals.js <library> <source id>`: which bars are sung, from where the voice sits in the stereo image.
+- `node scripts/beats.js <file> <bpm hint>`: every beat, downbeat and bass root of a song, even one
+  played by a live band whose tempo moves (the beat box follows these beats).
+- `node scripts/sync-check.js <render> <song> <beats.json> <from> <to>`: whether the beat box's kick
+  lands on the band's beats in a render.
+- `node scripts/clip-sheet.js <library> <source id> <out.jpg>`: three labeled frames from every clip of a
+  source, to spot titles, banners and credits to leave out.
+- `node scripts/compare-mix.js <remix> <original> <from> <to>`: each frequency band's share in a remix
+  against the original over the same music, to keep added parts subtle.
+- `node scripts/original-audio.js <render> <original> <out>`: lays a record's own sound under a
+  rendered video, lined up to the millisecond.
 - `node scripts/beat-phase.js <file> <bpm> <from> <to>`: whether added drums land on the song's beat.
 
 `.claude/skills/mixmage-producer` is a skill that teaches an agent to produce finished pieces with

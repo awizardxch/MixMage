@@ -1,6 +1,6 @@
 // Maps a song bar by bar: loudness, bass weight, and the strongest bass note (the chord root) of each
 // bar, so you can see its sections (intro, verse, chorus, breakdown) and write parts that follow it.
-//   node scripts/bars.js <library folder> <source id>
+//   node scripts/bars.js <library folder> <source id> [--roots]
 // It reads the one-bar clips the app's auto cut made ("hits", "Whole song · 1-bar clips"), so the bars
 // are the app's own bar grid. Prints rows of 8 bars: bar number, start time, then per bar
 // "<root><loudness>" with loudness in dB against the song's loudest bar, and a mark under bars whose
@@ -28,6 +28,8 @@ const rows = bars.map((c, k) => {
   const root = [...bass.keys()].sort((p, q) => bass[q] - bass[p])[0];
   return { k, start: c.start, db: 10 * Math.log10(e / seg.length + 1e-12), bass: 10 * Math.log10(b / seg.length + 1e-12), root: NAMES[root] };
 });
+// `--roots`: print only the roots, one per bar, ready to paste into a script's bass line.
+if (process.argv.includes('--roots')) { console.log(rows.map((r) => r.root).join(' ')); process.exit(0); }
 const top = Math.max(...rows.map((r) => r.db));
 const medBass = [...rows.map((r) => r.bass)].sort((p, q) => p - q)[Math.floor(rows.length / 2)];
 console.log(`${src.title}: ${rows.length} bars, ${src.bpm} BPM. Each cell: bass root + level vs the loudest bar (dB); "_" = low end 6+ dB down.`);
