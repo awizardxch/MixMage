@@ -790,8 +790,57 @@
     };
   }
 
+  // ---------- effect helpers for any piece ----------
+  // fxSections(at, [[bar, kind], ...]): how much of every effect each part of the song gets (kinds:
+  // intro, verse, prechorus, build, chorus, drop, breakdown, bridge, solo, outro; see FX_SECTION).
+  const fxSections = (at, list) => { for (const [bar, kind] of list) at(bar, () => fxSection(kind)); };
+  // lyricsAt(at, [[bar, text, { style, where, every, hold }], ...]): words on screen on the bar.
+  const lyricsAt = (at, list) => { for (const [bar, text, o] of list) at(bar, () => fxText(text, o)); };
+
+  // The effects sampler: every preset in turn, two bars each, over "Chips" from its first sung
+  // chorus, each named on screen. Shows users the choices and agents a worked example.
+  async function fxSampler() {
+    const { s, tr, barTime, snap } = await trackChips();
+    const pools = rodeoPools();
+    const A = decks[0];
+    const FROM = 40;
+    const order = ['shroom', 'shroomMirror', 'rodeo', 'archival', 'vhsParty', 'neonClub', 'comic', 'heat', 'nightVision', 'noir', 'brand', 'splitBeat', 'dream'];
+    const names = { shroom: 'Shroom', shroomMirror: 'Shroom + mirror', rodeo: 'Rodeo', archival: 'Archival film', vhsParty: 'VHS party', neonClub: 'Neon club', comic: 'Comic', heat: 'Heat', nightVision: 'Night vision', noir: 'Noir', brand: 'Brand duotone', splitBeat: 'Split on the beat', dream: 'Dream' };
+    const BARS = order.length * 2 + 4;
+    await cueChips(A, s, barTime(FROM));
+    applyVolumes();
+    setDeckLowCut(0);
+    setDeckBass(A, 1);
+    const timeOf = (b) => (barTime(FROM + b) - barTime(FROM)) * 1000;
+    const { cuts, section } = picturePlan(pools);
+    section(0, BARS, 1, ['bucking', 'mud', 'ranch', 'nightRodeo', 'drive', 'faces', 'juke', 'road']);
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm: tr.bpm, bars: BARS, keepDeckTime: true, timeOf,
+      info: { tracked: tr.bpm, snapMs: Math.round(snap * 1000) },
+      events(at) {
+        scheduleCuts(at, cuts);
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { bpm: tr.bpm, follow: { deck: A, beats: tr.beats }, master: 1 });
+        });
+        order.forEach((p, k) => at(k * 2, () => { fxPreset(p); if (p === 'shroom' || p === 'shroomMirror') fx.amount = 0.8; setOutputTitle({ title: names[p], sub: `fxPreset('${p}')` }); }));
+        // Then text on the beat, and a freeze on the last bar.
+        const t = order.length * 2;
+        at(t, () => { fxPreset('rodeo'); setOutputTitle(null); });
+        lyricsAt(at, [[t, 'when the chips are down', { style: 'pop', where: 'center', every: 1 }], [t + 2, 'get back up', { style: 'slide', where: 'center' }]]);
+        // Freeze a moment after a cut, never on it: on the cut itself the outgoing clip has stopped and
+        // the incoming one has not drawn, so the freeze would hold the deck's cover art.
+        at(t + 3.3, () => { fxFreeze(240 / tr.bpm * 0.68); fxText(null); setOutputTitle({ title: 'Mixmage effects', sub: 'choose any mix, by name or from the FX menu', center: true }); });
+      },
+    };
+  }
+
   // ---------- variants ----------
   const variants = {
+    fxSampler,
     rodeoVideo,
     rodeoEdit,
     rodeoFull,
@@ -1075,7 +1124,9 @@
     const tOf = run.timeOf || ((bars) => bars * BAR);
     const ev = [];
     run.events((bars, fn) => ev.push({ t: tOf(bars), fn }));
-    ev.push({ t: tOf(run.bars), fn: () => { stopAll(); for (const d of decks) setDeckPlaying(d, false); } });
+    // At the end: hold the last frame (the recording runs on for the sound's tail, and with the pads
+    // stopped the viewer would fall back to a deck's own picture, for a record its cover art).
+    ev.push({ t: tOf(run.bars), fn: () => { if (typeof fxFreeze === 'function') fxFreeze(5); stopAll(); for (const d of decks) setDeckPlaying(d, false); } });
     ev.sort((x, y) => x.t - y.t);
 
     await toggleOutputRec();

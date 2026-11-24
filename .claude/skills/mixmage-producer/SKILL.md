@@ -33,6 +33,7 @@ the user plainly which judgments are measured and which are theirs to make by ea
 | Finding every beat | `node scripts/beats.js <file> <bpm hint> [--json out.json]`: tracks each beat (src/beats.js: librosa's dynamic-programming tracker on log-band flux, Essentia's multi-feature agreement, aubio's HFC and peak picking, HPSS bass roots with a confidence), prints tempo per 8 bars (a live band drifts) |
 | Hearing whether the added kick is on the band | `node scripts/sync-check.js <render> <song> <beats.json> <from> <to>`: matched-filters the beat box's kick in the render against the song's tracked beats; in sync = median within ~5 ms, most beats within 15 ms |
 | Hearing whether the added parts are subtle | `node scripts/compare-mix.js <remix> <original> <from> <to> [originalTimeAtFrom]`: each band's share of the total in the original and the remix over the same music. Subtle = low bands within +2 dB, the rest within 1.5 dB; mids losing share means the added beat buries the voice and guitars. Give the last argument when the song repeats itself, or it can match the wrong chorus |
+| Watching for dark, washed-out, frozen or flashing picture | `node scripts/check-video.js <video>`: DARK/WASHED/FROZEN stretches and the worst flashes per second (over 3 fails) |
 | Hearing a flam | `node scripts/beat-phase.js <file> <bpm> <from> <to>`: folds low-band onsets over the beat; one peak = added drums land with the song, two = they don't |
 
 Read every contact sheet you make. Bugs found this way so far: a black opening, credit frames, title
@@ -76,13 +77,17 @@ Existing variants (all in `scripts/demo-performance.js`, in the `variants` objec
 | `style80s`, `styleSmooth`, `styleBass` | The three styles on the second, all-new crate |
 | `rodeoEdit` | "Chips" (country rock) as a 33-bar dance edit: beat box following the band, build and drop, Shroom FX over rodeo footage |
 | `rodeoFull` | The whole of "Chips" (5:43, every lyric) as a dance record: three builds, four drops, two breakdowns, picture telling the song |
+| `fxSampler` | Every effect preset in turn over "Chips", named on screen, then text and a freeze |
 | `rodeoVideo` | The music video: "Chips" exactly as recorded, the rodeo story cut to its tracked bars, Shroom FX pulsing on the band's beats; then `original-audio.js` lays in the record's own sound |
 
 **When the user wants the song itself** (they did, after hearing the dance versions): play it from
 one deck, add nothing to the sound, cut the picture to its tracked bars (`timeOf`), let the effects
 pulse on its beats (`fx.follow = { deck, beats }`), then replace the render's sound with the
 original's: `node scripts/original-audio.js demo/<name>-output.mp4 <original file> <out.mp4>`
-(it finds the offset by cross-correlation, to the millisecond). The app's output always passes its
+(it finds the offset by cross-correlation, to the millisecond). A render that starts partway into
+the record needs a 4th argument, the record's time at the render's start, roughly; check that it
+prints a match strength well above 0.3. Do not pipe its output through `Select-Object -First`: that
+stops the tool before it writes the file. The app's output always passes its
 limiter, so without that step a mastered record is squashed. A shorter version is a stretch cut from
 that file with ffmpeg and a fade, not a re-edit of the song.
 
@@ -199,6 +204,65 @@ juggling a bar, stabs and the echo-out.
 - After any change, re-run `analyze-mix.js`. Flags at the very start and end are the fades. A flagged
   run in the middle with `sub -10 dB` is usually the song's own breakdown (compare with the same
   song in another render before "fixing" it). A single flagged half-second is something you added.
+
+## Effects: what is available and how to choose
+
+Everything is in `src/renderer/fx.js`; the user picks the same things from the FX menu under the
+viewer (a preset) and "Effects ▾" (tick any effects). The user or the piece decides which to use;
+nothing is applied unless chosen. `fxSampler` (render it, then `original-audio.js ... 68.3`) shows
+every preset in turn, named on screen.
+
+**Presets** (`fxPreset(name)`), by mood:
+
+| Preset | What it is | Suits |
+|---|---|---|
+| `shroom`, `shroomMirror` | Rainbow color wash, trails; with kaleidoscope | psychedelic, EDM |
+| `rodeo` | Light shroom color, film, zoom punch | country, archival Americana |
+| `archival` | Film (grain, scratches, flicker, weave, fade) and sepia | old footage, documentary |
+| `vhsParty` | VHS tracking, bleed, scanlines, PLAY stamp; shake; zoom punch | 80s/90s throwback, lo-fi |
+| `neonClub` | Neon grade, zoom punch, strobe every 4 beats, trails | club, house, EDM |
+| `comic` | Halftone print dots, zoom punch | cartoons, pop |
+| `heat` | Thermal camera colors, shake | dark, heavy, a breakdown |
+| `nightVision` | Green phosphor, noise, vignette | night footage, tension |
+| `noir` | High-contrast black and white, film | drama, a quiet section |
+| `brand` | Duotone in Forge colors (`dark`, `light` settable) | promos |
+| `splitBeat` | Four panes of recent clips trading places every two beats | call and response, montage |
+| `dream` | Double exposure, trails, warm grade | intros, ballads |
+
+**Single effects** (`fxUse([...])`, `fxAdd(name, settings)`, `fxSet`, `fxRemove`; each takes an
+`amount` 0..1, defaults in `FX_CATALOG`):
+
+- On the beat: `zoomPunch` {every}, `shake` {every}, `strobe` {every, color 'white'|'black'},
+  `stutter` {every: 0.25 = the picture steps in quarter beats}. `every` is in beats.
+- Looks: `film` {grain, scratches, flicker, weave, fade}, `vhs` {stamp}, `grade` {look: sepia, noir,
+  warm, cold, tealOrange, neon}, `duotone` {dark, light}, `halftone` {cell}, `thermal`,
+  `nightVision`, `mirror`, `trails`.
+- Compose (they use the clips shown before the current one): `split` {panes 2|4}, `pip` {size,
+  corner 'tl'|'tr'|'bl'|'br'}, `double`, `chroma` {key '#00ff00', tolerance}.
+- Text: `fxText(text, { style: 'caption'|'pop'|'type'|'slide', where: 'bottom'|'center'|'top',
+  every (beats per word for pop), hold (s) })`; `fxText(null)` clears.
+- `fxFreeze(seconds)` holds the picture. Freeze a moment after a cut, never on it: on the cut the
+  old clip has stopped and the new one has not drawn, so the freeze holds the deck's cover art.
+
+They all follow the beat: set `fx.bpm` (and `fx.t0`), or better `fx.follow = { deck, beats }` with
+tracked beats, so hits land on a live band's beats.
+
+**Section by section** (in a piece script): `fxSections(at, [[0, 'intro'], [8, 'verse'],
+[32, 'build'], [40, 'chorus'], [72, 'breakdown'], ...])` scales every effect (`fx.master`): intro
+0.45, verse 0.6, build 0.85, chorus/drop 1, breakdown 0.35, outro 0.4. Switch presets on section
+changes with `at(bar, () => fxPreset('...'))`. Lyrics: `lyricsAt(at, [[bar, 'words', { style:
+'pop' }], ...])`; take the words from the user or from captions (`captions.js`), never invent them.
+
+**Choosing:** let the song and the user decide. Match the footage (archival film on archival
+footage, comic on cartoons), keep a look per section rather than changing every bar, and keep the
+strongest effects for the drops. Several looks stacked at once turns to mud; one look plus one beat
+effect is usually enough.
+
+**Safety and checking:** every full-frame flash (strobe, `fxFlash`) passes one limiter: at most 3 a
+second, the broadcast photosensitive-epilepsy line, whatever a script asks. After rendering run
+`node scripts/check-video.js <video>`: it reports DARK, WASHED and FROZEN stretches and the worst
+flash rate; a FLASHES FAIL must be fixed before posting. Dark night footage shows up as short DARK
+runs; that is fine if the footage is meant to be dark.
 
 ## The live-blend style (measured from a real set)
 

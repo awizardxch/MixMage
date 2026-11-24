@@ -364,6 +364,7 @@ function updateViewer() {
   }
   if (!viewerFade) viewerShown = layers;
   viewerLayers = layers;
+  if (typeof fxNote === 'function') fxNote(layers);
   const vids = $('viewer').getElementsByTagName('video');
   for (let k = 0; k < vids.length; k++) {
     const at = layers.findIndex((l) => l.el === vids[k]);

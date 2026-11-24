@@ -596,7 +596,14 @@ function createWindow() {
           || auto.wholeSong.hintLoop.beats !== 4 || auto.wholeSong.hintLoop.bpm !== 120) errors++;
         const fxr = await win.webContents.executeJavaScript('window.__smokeFx()');
         console.log('SMOKE_FX', JSON.stringify(fxr));
-        if (fxr.offSpread > 2 || fxr.onSpread < 60 || !fxr.viewerCanvas) errors++;
+        // Every effect and preset must paint without error, and change a still test frame (stutter
+        // and trails only show on moving pictures); the strobe must stay at 3 flashes a second or fewer.
+        const still = ['stutter', 'trails'];
+        const unchanged = Object.entries(fxr.effects).filter(([k, v]) => !still.includes(k) && !(v > 1)).map(([k]) => k);
+        if (fxr.errors.length || unchanged.length || !(fxr.text > 0.5) || !(fxr.flashesIn2s >= 4 && fxr.flashesIn2s <= 7) || !fxr.viewerCanvas) {
+          console.log('SMOKE_FX_FAIL', JSON.stringify({ errors: fxr.errors, unchanged, flashes: fxr.flashesIn2s }));
+          errors++;
+        }
         const tb = await mediaBeats({ file: src.file, bpm: 118 });
         const gaps = tb.beats.slice(1).map((t, k) => t - tb.beats[k]);
         const spread = Math.max(...gaps.slice(2, -2)) - Math.min(...gaps.slice(2, -2));

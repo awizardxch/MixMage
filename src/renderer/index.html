@@ -33,7 +33,9 @@
         <button id="playBtn" title="Space">Play</button>
         <span id="timeLabel" class="mono">0:00.00 / 0:00.00</span>
         <label class="rate">Speed <input id="rateInput" type="range" min="0.25" max="2" step="0.05" value="1"><span id="rateLabel" class="mono">1.00×</span></label>
-        <label class="fx" title="Shroom FX: psychedelic color, trails and beat pulse over the viewer and the recorded output. Black-and-white footage takes color too.">FX <select id="fxMode"><option value="off">Off</option><option value="shroom">Shroom</option><option value="mirror">Shroom + mirror</option></select><input id="fxAmount" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+        <label class="fx" title="Music-video effects over the viewer and the recorded output: pick a preset, or tick effects under Effects. The slider sets the Shroom color's strength.">FX <select id="fxMode"></select><input id="fxAmount" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+        <button id="fxMore" title="Choose effects one by one: beat effects, looks, compositions">Effects ▾</button>
+        <div id="fxPanel" hidden></div>
       </div>
       <div class="row marks">
         <button id="inBtn" title="I">Set In</button><span id="inLabel" class="mono">–</span>

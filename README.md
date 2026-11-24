@@ -21,8 +21,12 @@ It is the digital, AI-era take on 1980s turntable mixing and sampling.
   record's own tracked beats, so it stays with a live drummer, pumping the decks on every kick, plus a
   low-cut sweep for builds.
 - **One viewer.** Shows whatever is playing, with dissolves between clips.
-- **Shroom FX.** Psychedelic color, kaleidoscope mirror and trails that pulse on the beat; it colors
-  black-and-white footage too, and records into the output.
+- **Music-video effects.** Presets by mood (Shroom, Rodeo, Archival film, VHS party, Neon club, Comic,
+  Heat, Night vision, Noir, Brand duotone, Split on the beat, Dream) or any mix of single effects:
+  zoom punch, shake, strobe, stutter, freeze, film, VHS, color grades, duotone, halftone, thermal, night
+  vision, kaleidoscope, trails, split screen, picture in picture, double exposure, chroma key, and
+  beat-timed text. They pulse on the song's tracked beats, show in the viewer and record into the
+  output. Strobes are capped at 3 flashes a second.
 - **Recording.** Record pads into a deck, or record the final output with titles to MP4.
 - **YouTube search** from the address box.
 
@@ -57,8 +61,9 @@ These measure a mix when you cannot listen to it, so a script or an agent can ch
   source, to spot titles, banners and credits to leave out.
 - `node scripts/compare-mix.js <remix> <original> <from> <to>`: each frequency band's share in a remix
   against the original over the same music, to keep added parts subtle.
-- `node scripts/original-audio.js <render> <original> <out>`: lays a record's own sound under a
-  rendered video, lined up to the millisecond.
+- `node scripts/original-audio.js <render> <original> <out> [originalTimeAtStart]`: lays a record's own
+  sound under a rendered video, lined up to the millisecond.
+- `node scripts/check-video.js <video>`: dark, washed-out and frozen stretches, and the flash rate.
 - `node scripts/beat-phase.js <file> <bpm> <from> <to>`: whether added drums land on the song's beat.
 
 `.claude/skills/mixmage-producer` is a skill that teaches an agent to produce finished pieces with
