@@ -1,0 +1,20 @@
+{
+  "name": "mixmage",
+  "productName": "Mixmage",
+  "version": "0.1.0",
+  "description": "Mixmage, the spellweaver of sound and vision: a MIDI-played sampler, deck mixer and recorder for audio and video clips",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "setup": "node scripts/setup.js",
+    "postinstall": "node scripts/setup.js",
+    "smoke": "electron . --smoke"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

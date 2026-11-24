@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src 'self' file: data: https://i.ytimg.com; media-src 'self' file: blob:; style-src 'self' 'unsafe-inline'">
+  <title>Mixmage — the spellweaver of sound and vision</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Mixmage <span class="tagline">the spellweaver of sound and vision</span></h1>
+    <form id="addForm">
+      <input id="urlInput" type="text" placeholder="Paste a YouTube URL, or type words to search YouTube…" spellcheck="false" autocomplete="off">
+      <button type="submit" id="addBtn" class="primary">Fetch</button>
+    </form>
+    <div id="midiStatus" class="chip" title="MIDI inputs">MIDI: none</div>
+    <button id="recOutBtn" title="Record the final output: the viewer's picture with pads, source and both decks in the sound">● Record output</button>
+    <button id="decksBtn" class="on" title="Show or hide the two decks">Decks</button>
+    <button id="folderBtn" title="Open the clips folder">Folder</button>
+  </header>
+  <div id="results" hidden></div>
+  <div id="progress" hidden><div id="progressBar"></div><span id="progressText"></span></div>
+
+  <main>
+    <section id="sourcePanel">
+      <div class="row">
+        <select id="sourceSelect" title="Fetched videos"></select>
+        <button id="removeSourceBtn" title="Remove this video from the library">Remove</button>
+      </div>
+      <div class="videoBox" id="viewer"><video id="srcVideo" preload="auto"></video><div id="srcEmpty" class="empty">Fetch a video to start sampling</div><div id="viewerLabel"></div></div>
+      <div id="timeline" title="Click to seek"><div id="selRange"></div><div id="playhead"></div></div>
+      <div class="row transport">
+        <button id="playBtn" title="Space">Play</button>
+        <span id="timeLabel" class="mono">0:00.00 / 0:00.00</span>
+        <label class="rate">Speed <input id="rateInput" type="range" min="0.25" max="2" step="0.05" value="1"><span id="rateLabel" class="mono">1.00×</span></label>
+      </div>
+      <div class="row marks">
+        <button id="inBtn" title="I">Set In</button><span id="inLabel" class="mono">–</span>
+        <button id="outBtn" title="O">Set Out</button><span id="outLabel" class="mono">–</span>
+        <button id="previewBtn" title="P">Preview</button>
+        <button id="cutBtn" class="primary" title="Enter: cut In→Out to the selected pad">Cut to pad</button>
+      </div>
+      <div class="row">
+        <select id="autoMode" title="How Auto cut chooses slice points">
+          <option value="hits">Slice on hits</option>
+          <option value="equal">Equal slices</option>
+          <option value="sounds">Find sounds</option>
+        </select>
+        <select id="autoLen" title="Fill this page: one page of clips. A clip length: cut the whole region back to back, adding pages as needed.">
+          <option value="0">Fill this page</option>
+          <option value="1">Whole song · 1-bar clips</option>
+          <option value="2">Whole song · 2-bar clips</option>
+          <option value="4">Whole song · 4-bar clips</option>
+          <option value="8">Whole song · 8-bar clips</option>
+        </select>
+        <button id="autoBtn" title="Chop In→Out (or the whole video) onto empty pads">Auto cut to pads</button>
+      </div>
+      <div class="row">
+        <button id="armBtn" title="` (backquote): while armed, hold a pad to record from the playing video, release to stop">● Record to pads</button>
+        <span id="armHint" class="hint">Arm, then hold a pad while the video plays.</span>
+      </div>
+    </section>
+
+    <section id="padPanel">
+      <div id="pageBar" class="row">
+        <span class="hint">Page</span>
+        <button id="prevPageBtn" title="Previous page ([)">‹</button>
+        <div id="pageTabs" title="[ and ] switch pages"></div>
+        <button id="nextPageBtn" title="Next page (])">›</button>
+        <button id="learnPageBtn">Learn page buttons</button>
+        <button id="addPageBtn" title="Add another page of 16 pads">+ Page</button>
+        <button id="removePageBtn" title="Remove the page being shown">Remove page</button>
+      </div>
+      <div id="pads"></div>
+      <div id="inspector" class="row">
+        <button id="allBtn" title="When on, Mode, Vol and the loop buttons change every pad instead of just the selected one">All pads</button>
+        <span id="selPadLabel" class="mono">Pad 1</span>
+        <input id="padName" type="text" placeholder="Clip name" maxlength="40">
+        <select id="padMode" title="Playback mode">
+          <option value="gate">Gate (hold)</option>
+          <option value="oneshot">One-shot</option>
+          <option value="loop">Loop (toggle)</option>
+        </select>
+        <label>Vol <input id="padGain" type="range" min="0" max="1.5" step="0.01" value="1"></label>
+        <button id="learnBtn" title="Then hit a pad or key on your controller">MIDI learn</button>
+        <button id="clearBtn" title="Delete this pad's clip (Del)">Clear pad</button>
+        <button id="clearAllBtn" title="Delete every clip on the page being shown">Clear page</button>
+        <button id="stopAllBtn" title="Esc">Stop all</button>
+        <label class="blend" title="Crossfade between clips, like a playlist crossfade: the outgoing clip fades out (sound and picture) while the next fades in. 0 = hard cuts.">Blend <input id="blend" type="range" min="0" max="3" step="0.05" value="0.25"><span id="blendLabel" class="mono">0.25 s</span></label>
+      </div>
+      <div id="loopRow" class="row">
+        <button id="autoLoopBtn" title="Find a clean loop: starts on the first hit, runs a whole number of beats, ends on a zero crossing">Auto loop</button>
+        <button id="halfBtn" title="Halve the loop length">÷2</button>
+        <button id="doubleBtn" title="Double the loop length">×2</button>
+        <button id="fullLoopBtn" title="Loop the whole clip">Full clip</button>
+        <span id="loopLabel" class="mono hint"></span>
+      </div>
+      <div id="sampleRow" class="row">
+        <label title="Pitch and speed together, like a record: up is faster and higher, down is slower and lower. Double-click to reset.">Pitch <input id="padPitch" type="range" min="-24" max="24" step="1" value="0"></label>
+        <span id="pitchLabel" class="mono">0 st · 100%</span>
+        <button id="keysBtn" title="Play the selected pad across the keyboard keys, pitched by semitone (chords work). The drum pads keep triggering clips.">Keys play pad</button>
+        <button id="levelBtn" class="on" title="Level match: play every clip at the same loudness, whatever video it came from. Vol still adjusts each pad on top.">Level match</button>
+        <span id="trimLabel" class="mono hint"></span>
+      </div>
+      <canvas id="wave" title="Drag near the start or end to trim the sample. Double-click to restore the whole clip."></canvas>
+    </section>
+  </main>
+  <div id="deckRow">
+    <div class="deck" id="deckA"></div>
+    <div id="mixer">
+      <b>MIXER</b>
+      <span class="hint">A ◄ crossfade ► B</span>
+      <input id="xfade" type="range" min="0" max="1" step="0.01" value="0.5" title="Crossfader. Double-click to center.">
+      <span class="hint">Pads play over both decks.</span>
+    </div>
+    <div class="deck" id="deckB"></div>
+  </div>
+  <div id="toast" hidden></div>
+  <script src="renderer.js"></script>
+  <script src="decks.js"></script>
+</body>
+</html>
