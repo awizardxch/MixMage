@@ -73,6 +73,9 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .videoBox video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 /* Every video (source, pads, decks) is stacked in the one viewer; updateViewer picks what shows. */
 #viewer video { visibility: hidden; }
+#fxView { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 30; }
+.transport .fx { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.transport .fx input { width: 80px; }
 #viewerLabel { position: absolute; left: 8px; top: 8px; z-index: 50; padding: 3px 8px; border-radius: 5px; background: rgba(0, 0, 0, .6); font-size: 12px; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #viewerLabel:empty { display: none; }
 #viewer .empty { z-index: 40; }

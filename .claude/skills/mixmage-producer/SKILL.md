@@ -27,6 +27,9 @@ the user plainly which judgments are measured and which are theirs to make by ea
 | Listening for loudness | ffmpeg `volumedetect` on the file, or per 2 s with `-ss`/`-t` |
 | Watching the video | Extract a contact sheet with ffmpeg (`fps=1/1.85,scale=160:-2,tile=16x1`) and Read the image |
 | Hearing the words | `node scripts/captions.js <video id> [from] [to]` prints YouTube captions with times (many music uploads have none; YouTube rate-limits this, retry later) |
+| Hearing the key | `node scripts/key.js <file> [from] [to]`: the key (Krumhansl profiles) and the strongest bass notes |
+| Hearing the song's form | `node scripts/bars.js <library> <source id>`: every bar's root note and level, 8 a row, from the app's one-bar clips; sections and chord cycles show up as repeating rows |
+| Hearing a flam | `node scripts/beat-phase.js <file> <bpm> <from> <to>`: folds low-band onsets over the beat; one peak = added drums land with the song, two = they don't |
 
 Read every contact sheet you make. Bugs found this way so far: a black opening, credit frames, title
 cards used as picture, the same clips in every video, clips that had not loaded.
@@ -66,6 +69,8 @@ Existing variants (all in `scripts/demo-performance.js`, in the `variants` objec
 |---|---|
 | `promo2`..`promo6` | Forge promos: one song each, picture cut per bar, titles |
 | `cut80s` | The 80s-turntable style: half-bar cuts, transformer, beat juggle, stabs, scratch wobble, echo-out |
+| `style80s`, `styleSmooth`, `styleBass` | The three styles on the second, all-new crate |
+| `shroomEdit` | "Chips" (country rock) as an EDM edit: beat box, build and drop, Shroom FX over cowboys and mushrooms |
 | `set1`..`set3` | Song-to-song DJ sets with a loop roll into each drop |
 | `ours1`..`ours3` | The user's track with cartoon picture, with and without Peggy Gou |
 | `mix`, `decks`, `instrument`, `blend` | Captioned feature tours of the app (not what the user wants for posts) |
@@ -99,6 +104,33 @@ Sound gains are not portable between sources: a gain that fixed one sample made 
 loud. Set gains near 1 (level match already evens sources), render, and adjust from `analyze-mix.js`.
 `cut80s(L, { id, pictures, stabs, tone, titles })` plays the 80s routine on any track and crate;
 `style80s`, `styleSmooth` and `styleBass` are the three styles on the second, all-new crate.
+
+### Turning a record into a dance track: the beat box and Shroom FX
+
+`shroomEdit` (a country-rock record, "Chips" by Choctaw Wildfire, made into an EDM edit with
+psychedelic color) is the example. Read it before writing a remix. The pieces:
+
+- **Beat box** (`src/renderer/beat.js`, also the Beat button in the mixer): a synthesized 909-style
+  kit locked to a tempo. `startBeat({ bpm, roots, duck, parts })` with bar 0 now; `setBeatParts({ kick,
+  clap, hat, closed, bass })`; `beat.roots` is one MIDI note per bar (C2 = 36) for the off-beat bass:
+  take them from `bars.js`, never guess; `beat.duck` is the sidechain pump on the decks (0.35 verse,
+  0.55 drop); `beat.roll = { from, to }` a snare roll in bars; `riser(ctxTime, seconds)`; `beat.hats`
+  scales the hats; `stopBeat()`.
+- **Lock the grid to the deck.** A video starts a little after `play()`, so a beat started on the
+  same event lands about 20 ms early. Every 2 bars set `beat.start` from the deck's `currentTime`
+  against the song bar's clip start (the `lock` helper in `shroomEdit`); corrections then stay within
+  a few ms. Check with `beat-phase.js`.
+- **Build and drop:** `setDeckLowCut(0..1, seconds)` sweeps a low cut on the decks; take the kick out
+  4 bars before the drop, roll and riser in, one beat of silence (deck `vol` 0), then everything on
+  the one with `setDeckLowCut(0, 0.01)`.
+- **Shroom FX** (`src/renderer/fx.js`, the FX menu under the viewer): `fx.mode` `'shroom'` or
+  `'mirror'` (kaleidoscope), `fx.amount`, `fx.trails`, `fx.beat` (pulse per beat), `fx.spin`, and
+  `fx.bpm` / `fx.t0` to put the pulse on the beat; `fxFlash()` on a drop. It colors black-and-white
+  footage too, and fills the frame (crops) while on.
+- Measured in that piece: a quiet intro is short of highs, so even soft hats stand 8 dB out; keep
+  intro hats at about 0.2. A riser at full level stood 17 dB out in the air band; 0.16 is right.
+  Pick sections by the bar map: a pre-chorus that runs into the chorus gives a build and drop with
+  no edit at all.
 
 Read `cut80s` before writing anything rhythmic; it shows sixteenth-note scheduling, gating the deck,
 juggling a bar, stabs and the echo-out.
@@ -173,7 +205,8 @@ the house-set style. They are different traditions; do not mix them in one short
 
 ## Checking the app itself
 
-`SMOKE_SRC=<a synthetic mp4> npx electron . --smoke` must end with `errors 0`. Run it after any
+`SMOKE_SRC=<a synthetic mp4> npx electron . --smoke` must end with `SMOKE_DONE errors 0` (the
+earlier `SMOKE ... errors` line is printed before most checks run; only `SMOKE_DONE` is the verdict). Run it after any
 change under `src/`. Synthetic test videos are made with ffmpeg `lavfi` (`testsrc` plus a gated
 `sine`); never test against the user's library except through `READONLY_LIBRARY=1 SMOKE_JS=<script>`.
 

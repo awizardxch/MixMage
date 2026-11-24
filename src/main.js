@@ -564,6 +564,12 @@ function createWindow() {
           || !dk.finalSaved || !(dk.deckAudioLevel > 0.01) || !dk.deleteKeyCleared
           || dk.blend.midLayers !== 2 || dk.blend.afterLayers !== 1 || !dk.blend.tailStillRunning || !dk.blend.tailEnded || dk.blend.hardCutLayers !== 1
           || auto.wholeSong.hintLoop.beats !== 4 || auto.wholeSong.hintLoop.bpm !== 120) errors++;
+        const fxr = await win.webContents.executeJavaScript('window.__smokeFx()');
+        console.log('SMOKE_FX', JSON.stringify(fxr));
+        if (fxr.offSpread > 2 || fxr.onSpread < 60 || !fxr.viewerCanvas) errors++;
+        const bt = await win.webContents.executeJavaScript('window.__smokeBeat()');
+        console.log('SMOKE_BEAT', JSON.stringify(bt));
+        if (!(bt.peak > 0.2) || !(bt.minDuck < 0.7) || !(bt.restored > 0.95)) errors++;
         const finals = fs.readdirSync(recordingsDir).filter((f) => f.endsWith('.mp4'));
         console.log('SMOKE_FILES', JSON.stringify(finals.map((f) => [f, fs.statSync(path.join(recordingsDir, f)).size])));
         const ws = auto.wholeSong;
@@ -576,6 +582,7 @@ function createWindow() {
         await new Promise((r) => setTimeout(r, 400));
       }
       if (process.env.SMOKE_SHOT) fs.writeFileSync(process.env.SMOKE_SHOT, (await win.webContents.capturePage()).toPNG());
+      console.log('SMOKE_DONE errors', errors); // the verdict after every check (the SMOKE line comes before most of them)
       app.exit(errors ? 1 : 0);
     }, 2500));
   }

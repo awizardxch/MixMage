@@ -381,8 +381,159 @@
   };
   const newSounds = () => state.pads.map((c, i) => (c && c.name.startsWith('New sound') && rt[i].buffer ? i : -1)).filter((i) => i >= 0);
 
+  // ---------- the shroom edit: a country-rock record turned into an EDM track ----------
+  // "Chips" by Choctaw Wildfire (139.7 BPM, C major; its YouTube video is only the cover). Played at its
+  // own tempo, so nothing is stretched. Song bars, from scripts/bars.js: 0-7 a quiet guitar intro,
+  // then a wall of sound; 112-119 a pre-chorus that runs straight into the chorus at 120-127
+  // (bass roots F F G C D G C Eb). The beat box (beat.js) adds the dance record; Shroom FX (fx.js)
+  // colors the picture; the black-and-white cowboy cartoon takes the rainbow too.
+  //   piece bars 0-7   the song's own intro; hats creep in at 4; growing fly agaric, light color
+  //   piece bars 8-15  verse with four on the floor, off-beat bass on the song's roots, a light pump
+  //   piece bars 16-23 the pre-chorus as the build: low cut rising, kick drops out at 20, snare roll
+  //                    and noise riser, one beat of silence, picture cutting faster, mirror on
+  //   piece bars 24-31 the chorus as the drop: everything in, hard pump, flashes, half-bar cuts
+  //   piece bar 32     the song rings out with one last kick
+  const CHIPS = 'diy32tpiipE';
+  const COWBOY = '5F0DyIlxT34'; // Whoops! I'm a Cowboy (1937)
+  const FUNGI = 'KaKMugW8Bqc'; // woodland fungi time-lapses (fly agaric, shaggy ink, earthstar)
+  const GROW = 'EF8nWF2GkXs'; // growing-mushroom compilation (mostly grow-kit boxes; close-ups only)
+  const NOTE = { C: 36, 'C#': 37, D: 38, 'D#': 39, E: 40, F: 41, 'F#': 42, G: 43, 'G#': 44, A: 45, 'A#': 46, B: 47 };
+  async function shroomEdit() {
+    const BPM = bpmOf(CHIPS, 139.7);
+    const song = byTime(padsOf(CHIPS));
+    if (song.length < 130) throw new Error(`"Chips" has ${song.length} bar clips; cut it whole in one-bar clips first`);
+    const pick = (list, keep) => keep.map((k) => list[k]).filter((i) => i != null);
+    const without = (list, bad) => list.filter((_, k) => !bad.includes(k));
+    // Dropped by eye from the thumbnail sheets: titles, credits, the "lesson" text cards, grow-kit boxes.
+    // The cartoon opens in an office (clips 2-14); the ranch (17 on) goes first, so the verse is cowboys.
+    const cowAll = byTime(padsOf(COWBOY));
+    const cowboy = [...without(cowAll, [0, 1, 15, 16, 22, 25, 27, 28]).filter((i) => cowAll.indexOf(i) >= 17), ...cowAll.slice(2, 15)];
+    const fungi = without(byTime(padsOf(FUNGI)), [0]);
+    const grow = pick(byTime(padsOf(GROW)), [5, 6, 12, 16, 17]);
+    const flyAgaric = fungi.filter((_, k) => k <= 6 || k >= 18); // the red caps
+    const oddFungi = fungi.filter((_, k) => k > 6 && k < 18); // shaggy ink and earthstars opening
+    const pics = [...cowboy, ...fungi, ...grow];
+    for (const i of pics) { state.pads[i].mode = 'oneshot'; state.pads[i].gain = 0; rt[i].pin = true; }
+    syncVideos();
+    await wait(1500);
+
+    // Bass roots per piece bar (the verse is song bars 8-15, the build 112-119, the drop 120-127).
+    const roots = [...Array(8).fill('C'), ...'G C G G C A G A'.split(' '), ...'D G F F C G D D#'.split(' '), ...'F F G C D G C D#'.split(' '), 'F'].map((n) => NOTE[n]);
+
+    const [A, B] = decks;
+    const cue = async (d, bar) => {
+      const s = state.sources.find((x) => x.id === CHIPS);
+      await loadDeck(d, { kind: 'source', title: s.title, url: s.url, file: s.file, bpm: BPM });
+      if (!d.video.duration) await new Promise((r) => d.video.addEventListener('loadedmetadata', r, { once: true }));
+      d.video.currentTime = state.pads[song[bar]].start;
+      d.rate = 1;
+      applyRate(d);
+      d.vol = 1;
+      d.q('vol').value = 1;
+    };
+    await cue(A, 0);
+    await cue(B, 112);
+    applyVolumes();
+    setDeckLowCut(0);
+    setBlend(0.3);
+    select(pics[0]);
+
+    return {
+      bpm: BPM, bars: 33, keepDeckTime: true,
+      events(at) {
+        // Picture: a list of [bar, pad] cuts; each dissolves from the last.
+        const cuts = [];
+        const deal = (from, to, step, lists) => {
+          let k = 0;
+          const pos = lists.map(() => 0);
+          for (let b = from; b < to - 0.001; b += typeof step === 'function' ? step(b) : step) {
+            const li = k++ % lists.length;
+            const list = lists[li];
+            cuts.push([b, list[pos[li]++ % list.length]]);
+          }
+        };
+        deal(0, 8, 2, [flyAgaric]);
+        deal(8, 16, 1, [cowboy.slice(0, 12)]);
+        deal(16, 24, (b) => (b < 20 ? 1 : b < 22 ? 0.5 : 0.25), [cowboy.slice(12), oddFungi, grow]);
+        deal(24, 33, 0.5, [cowboy, flyAgaric, cowboy, grow]);
+        let prev = null;
+        for (const [b, i] of cuts) {
+          const was = prev;
+          at(b + 0.01, () => { setBlend(b < 8 ? 0.6 : b < 16 ? 0.22 : 0.06); hit(i); if (was != null && was !== i) stop(was); });
+          prev = i;
+        }
+
+        // The beat's bar grid follows where the deck really is (a video starts playing a little after
+        // it is told to): piece bar p is song bar p on deck A, song bar p + 96 on deck B.
+        const BAR = 240 / BPM;
+        const lock = (d, songBar, pieceBar) => () => {
+          if (!d.playing || d.video.paused || !beat.on) return;
+          const pieceTime = d.video.currentTime - state.pads[song[songBar]].start + pieceBar * BAR;
+          const before = beat.start;
+          beat.start = ctx.currentTime - pieceTime;
+          lockLog.push(Math.round((beat.start - before) * 1000)); // ms the grid moved
+        };
+        const lockLog = [];
+        at(32.9, () => console.log(`SHROOM_LOCK grid corrections (ms): ${lockLog.join(' ')}`));
+        for (let b = 0.25; b < 16; b += 2) at(b, lock(A, 0, 0));
+        for (let b = 16.25; b < 32; b += 2) at(b, lock(B, 112, 16));
+
+        // Sound.
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          startBeat({ bpm: BPM, roots, duck: 0, parts: { kick: false, clap: false, hat: false, closed: false, bass: false } });
+          Object.assign(fx, { mode: 'shroom', amount: 0.3, trails: 0.35, beat: 0, spin: 0.4, bpm: BPM, t0: performance.now() / 1000 });
+          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire · Mixmage shroom edit' });
+        });
+        // Measured: the song's intro is 7-12 dB short of highs, so full hats stood 7-10 dB out over it,
+        // and 0.4 still 8 dB. A whisper creeping in.
+        at(4, () => { beat.hats = 0.18; setBeatParts({ closed: true }); fx.amount = 0.45; });
+        at(6, () => { setBeatParts({ hat: true }); setOutputTitle(null); });
+        at(8, () => { beat.hats = 1; setBeatParts({ kick: true, bass: true }); beat.duck = 0.35; Object.assign(fx, { amount: 0.65, beat: 0.5, spin: 0.7, trails: 0.45 }); });
+        at(12, () => setBeatParts({ clap: true }));
+        // The build.
+        at(16, () => {
+          fade(1);
+          setDeckPlaying(B, true);
+          setDeckPlaying(A, false);
+          setBeatParts({ bass: false, clap: false });
+          beat.duck = 0.25;
+          beat.roll = { from: 20, to: 24 };
+          Object.assign(fx, { mode: 'mirror', amount: 0.7, spin: 1 });
+        });
+        for (let s = 0; s <= 32; s++) at(16 + (s / 32) * 7.75, () => { setDeckLowCut(0.75 * (s / 32) ** 1.6, 0.25); fx.amount = 0.7 + 0.3 * (s / 32); fx.spin = 1 + 2 * (s / 32); fx.trails = 0.45 + 0.35 * (s / 32); });
+        at(20, () => { setBeatParts({ kick: false, hat: false, closed: false }); riser(ctx.currentTime, 4 * (240 / BPM) - 0.05); });
+        at(23.75, () => { B.vol = 0; applyVolumes(); }); // one beat of silence before the drop
+        // The drop.
+        at(24, () => {
+          setDeckLowCut(0, 0.01);
+          B.vol = 1;
+          applyVolumes();
+          beat.roll = null;
+          beat.duck = 0.55;
+          setBeatParts({ kick: true, clap: true, hat: true, closed: true, bass: true });
+          Object.assign(fx, { amount: 1, beat: 1, spin: 1.6, trails: 0.6 });
+          fxFlash();
+        });
+        at(28, () => { fx.mode = 'shroom'; fxFlash(); });
+        at(30, () => { fx.mode = 'mirror'; });
+        // The end: the song rings out over one bar with a last kick.
+        at(32, () => {
+          setBeatParts({ clap: false, hat: false, closed: false, bass: false });
+          fxFlash();
+          setOutputTitle({ title: 'Chips', sub: 'Choctaw Wildfire', center: true });
+        });
+        at(32.02, () => setBeatParts({ kick: false }));
+        for (let s = 0; s <= 24; s++) at(32 + s / 24, () => { B.vol = 1 - s / 24; applyVolumes(); fx.amount = 1 - 0.5 * (s / 24); });
+        at(32.98, () => { stopBeat(); });
+      },
+    };
+  }
+
   // ---------- variants ----------
   const variants = {
+    shroomEdit,
     promo,
     cut80s,
     // 80s cut on "Mothership", Felix/Betty sounds as the stabs and scratch, swap titles.

@@ -19,8 +19,26 @@ const mixProbe = ctx.createAnalyser();
 master.connect(recDest);
 limiter.connect(mixDest);
 limiter.connect(mixProbe);
-// Routes a <video>'s sound through the audio graph (a gain for level matching, then the limiter) so it
-// can be leveled and recorded as well as heard. Returns the gain.
+// Every video's sound (the source and both decks) meets on one bus before the limiter. The beat box
+// (beat.js) ducks this bus on each kick, the sidechain pump of dance music, and its low cut is the
+// filter sweep of a build. Both rest at "no effect".
+const deckBus = ctx.createGain();
+const deckLowCut = ctx.createBiquadFilter();
+deckLowCut.type = 'highpass';
+deckLowCut.frequency.value = 10;
+deckLowCut.Q.value = 0.7;
+deckBus.connect(deckLowCut).connect(limiter);
+
+// Low cut on the decks: 0 = open (10 Hz), 1 = thin (about 2 kHz), over `seconds`.
+function setDeckLowCut(v, seconds = 0.05) {
+  const hz = 10 * Math.pow(200, Math.max(0, Math.min(1, v)));
+  deckLowCut.frequency.cancelScheduledValues(ctx.currentTime);
+  deckLowCut.frequency.setValueAtTime(deckLowCut.frequency.value, ctx.currentTime);
+  deckLowCut.frequency.exponentialRampToValueAtTime(hz, ctx.currentTime + Math.max(0.01, seconds));
+}
+
+// Routes a <video>'s sound through the audio graph (a gain for level matching, then the deck bus and
+// the limiter) so it can be leveled and recorded as well as heard. Returns the gain.
 function tapElement(el) {
   const node = ctx.createMediaElementSource(el);
   // A low shelf in front of the gain is the deck's bass control: a DJ blends two records with the
@@ -30,7 +48,7 @@ function tapElement(el) {
   bass.frequency.value = 180;
   bass.gain.value = 0;
   const gain = ctx.createGain();
-  node.connect(bass).connect(gain).connect(limiter);
+  node.connect(bass).connect(gain).connect(deckBus);
   gain.bass = bass;
   return gain;
 }
@@ -358,6 +376,7 @@ function updateViewer() {
 
 // ---------- recording ----------
 function paintLayers(g, canvas, layers) {
+  if (typeof fxActive === 'function' && fxActive()) return fxPaint(g, canvas, layers);
   g.globalAlpha = 1;
   g.fillStyle = '#000';
   g.fillRect(0, 0, canvas.width, canvas.height);

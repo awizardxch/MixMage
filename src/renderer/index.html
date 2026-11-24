@@ -33,6 +33,7 @@
         <button id="playBtn" title="Space">Play</button>
         <span id="timeLabel" class="mono">0:00.00 / 0:00.00</span>
         <label class="rate">Speed <input id="rateInput" type="range" min="0.25" max="2" step="0.05" value="1"><span id="rateLabel" class="mono">1.00×</span></label>
+        <label class="fx" title="Shroom FX: psychedelic color, trails and beat pulse over the viewer and the recorded output. Black-and-white footage takes color too.">FX <select id="fxMode"><option value="off">Off</option><option value="shroom">Shroom</option><option value="mirror">Shroom + mirror</option></select><input id="fxAmount" type="range" min="0" max="1" step="0.05" value="0.8"></label>
       </div>
       <div class="row marks">
         <button id="inBtn" title="I">Set In</button><span id="inLabel" class="mono">–</span>
@@ -112,11 +113,15 @@
       <span class="hint">A ◄ crossfade ► B</span>
       <input id="xfade" type="range" min="0" max="1" step="0.01" value="0.5" title="Crossfader. Double-click to center.">
       <span class="hint">Pads play over both decks.</span>
+      <button id="beatBtn" title="Beat box: kick, clap, hats and off-beat bass at the playing deck's tempo, pumping the decks on each kick. Press it on the downbeat.">Beat</button>
+      <label class="hint" title="Low cut on both decks, for a build. Double-click to open it.">Lo cut <input id="lowCut" type="range" min="0" max="1" step="0.01" value="0"></label>
     </div>
     <div class="deck" id="deckB"></div>
   </div>
   <div id="toast" hidden></div>
   <script src="renderer.js"></script>
   <script src="decks.js"></script>
+  <script src="fx.js"></script>
+  <script src="beat.js"></script>
 </body>
 </html>

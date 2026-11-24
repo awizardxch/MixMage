@@ -1442,7 +1442,7 @@ async function init() {
   const loaded = await window.api.load();
   const saved = loaded.pads || [];
   const total = Math.max(1, Math.ceil(saved.length / N)) * N; // whole pages
-  state = { sources: loaded.sources || [], pads: Array.from({ length: total }, (_, i) => saved[i] || null), midiMap: loaded.midiMap || {}, midiActions: loaded.midiActions || {}, decks: loaded.decks || [], recordings: loaded.recordings || [], xfade: loaded.xfade, blend: loaded.blend };
+  state = { sources: loaded.sources || [], pads: Array.from({ length: total }, (_, i) => saved[i] || null), midiMap: loaded.midiMap || {}, midiActions: loaded.midiActions || {}, decks: loaded.decks || [], recordings: loaded.recordings || [], xfade: loaded.xfade, blend: loaded.blend, fx: loaded.fx };
   setBlend(typeof state.blend === 'number' ? state.blend : 0.25);
   state.levelMatch = loaded.levelMatch !== false;
   setLevelMatch(state.levelMatch);
@@ -1456,6 +1456,8 @@ async function init() {
   await Promise.race([initMidi(), new Promise((r) => setTimeout(r, 3000))]);
   setInterval(tick, 16); // a timer rather than animation frames, so loops stay in sync when the window is covered
   initDecks(); // decks.js
+  initFx(); // fx.js
+  initBeat(); // beat.js
   // Then the clips, a few at a time, starting with the page on screen.
   const queue = Array.from({ length: total }, (_, i) => i).filter((i) => state.pads[i]);
   const loader = async () => { while (queue.length) await loadPad(queue.shift()); };
