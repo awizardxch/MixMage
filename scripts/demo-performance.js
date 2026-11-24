@@ -838,8 +838,400 @@
     };
   }
 
+  // ---------- "Mothership": the disco-in-space music video ----------
+  // aWizard's own "Mothership" (128 BPM, E major), played exactly as recorded, with a story cut to
+  // its tracked bars: contact from deep space, the launch, warp, a spacewalk under mirror-ball light,
+  // then the signal reaches Earth and everyone dances everywhere (streets, rooftops, beaches, clubs,
+  // raves, festivals, a line dance, 1920s dance halls, even moon hops), a quiet drift past Earth for
+  // the breakdown, and the last drop at full disco. The light effects (warp stars, mirror ball,
+  // lasers, glow) carry the disco. Footage: NASA/ESA, free stock dance footage, public-domain film,
+  // disco-ball and laser loops. (The user did not want the space-station crew as the dancers.)
+  // Song form (scripts/bars.js, the app's one-bar clips):
+  //   0-7 intro | 8-11 break | 12-29 groove | 30-31 turn | 32-47 second groove | 48-69 peak |
+  //   70-77 breakdown (low end out) | 78-83 drop | 84-87 build | 88-111 last drop | 112-113 end
+  // (MOTHERSHIP, the source id, is declared with the other songs above.)
+  const spaceSources = {
+    spacewalk: 'Wfoy_OvNDvw', // NASA spacewalk action cam, Earth below
+    // People dancing everywhere (free stock footage and public-domain film): the party the
+    // mothership brings down to Earth.
+    streets: 'IKa5Uq3-3PA', // dancing in parks, alleys, rooftops, a skate court
+    rave: 'ZMLAVLH7MJE', // a rave: hands up, masks, decks
+    club: 'm-UMIKbyD6A', // a club: a dancer under colored light, a mirror ball, the crowd
+    jump: 'yor5KaDW1wc', // a nightclub crowd jumping
+    crowd: 'TiaHRSNTkWI', // a seafront street party
+    pair: '4ZUjWQagsW4', // two dancers on a city bridge and street
+    vintage: 'B7wiEpxCPx4', // 1920s-30s chorus lines and dance halls
+    stage: 'Bwn8W6M-vxs', // a festival from above, light beams over the crowd
+    line: 't2tX4paz8yk', // a country line-dancing crowd
+    beach: 'duX_whJF3-I', // friends dancing at sunset on the beach
+    fest: 'wOC8Up-w8v8', // a festival crowd dancing
+    horsehead: '-PQpNb_yJVE', // ESA zoom into the Horsehead Nebula
+    andromeda: 'udAL48P5NJU', // Hubble's Andromeda panorama
+    cupola: 'xngkqPovLu8', // Earth through the ISS Cupola
+    rover: 'az9nFrnCK60', // Apollo 16 lunar rover "Grand Prix"
+    hops: '16D0hmLt-S0', // Apollo 16 "Lunar Olympics": jumps in 1/6 g
+    launch: 'vPW7ZqtW5U4', // Apollo 11 launch, slow motion
+    ball: 'eb68GDj6sSU', // colorful disco ball loop
+    mirror: 'piRtpNzUxWc', // real mirror ball, spinning
+    lasers: '0QfjmvcaH78', // club laser loops
+    warp: '0ky-U5cfunM', // warp-speed star tunnel
+  };
+  // Kept by eye from three-frame sheets (scripts/clip-sheet.js). Out: the ESA logo and the "Orion"
+  // constellation labels, Andromeda's captions and its washed-out core, the Apollo 11 title card and
+  // white-out, the rover's upscaler logo, "damaged tape" cards and comparison captions, the Lunar
+  // Olympics subtitles, the swim video's end card, near-black Cupola frames, the mandala loop.
+  // Two sources are out entirely: an ISS night timelapse (a watermark on every frame) and the Hubble
+  // Legacy Field zoom (near-black).
+  const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
+  const spaceKeep = {
+    spacewalk: range(0, 15),
+    // Dance footage, out: stock companies' title and end cards, "FREE STOCK VIDEOS" and place-name
+    // captions, the club video's corner logo (clips 22-29), dark openings. A 1920s Black Bottom
+    // film is out entirely (a Pathé logo on every frame).
+    streets: [0, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 27, 28, 29, 30, 31],
+    rave: [2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 21, 22, 23, 26, 27, 28, 29, 30, 31],
+    club: range(4, 21).filter((k) => k !== 17),
+    // The jumping crowd's own club lights strobe about 5 times a second (check-video.js failed the
+    // first render on it), so it is kept for reference but dealt into no pool.
+    jump: range(2, 5),
+    crowd: range(2, 13),
+    pair: range(0, 15),
+    vintage: [0, 1, 3, 4, 5, 7, 8, 11, 13, 16, 17, 19, 20, 21, 22, 24, 25, 26, 27],
+    stage: range(0, 15),
+    line: range(1, 10),
+    beach: range(0, 4),
+    fest: range(0, 3),
+    horsehead: range(3, 15),
+    andromeda: [...range(4, 23), 29],
+    cupola: [...range(4, 9), ...range(12, 29)],
+    rover: [1, 2, 3, 12, 13, 18, 19, 27, 28],
+    hops: range(9, 14),
+    launch: range(1, 20),
+    ball: range(0, 15),
+    mirror: range(0, 15),
+    lasers: range(0, 10),
+    warp: range(0, 15),
+  };
+  function spacePools() {
+    const pools = {};
+    for (const [name, id] of Object.entries(spaceSources)) {
+      const all = clipsOf(id);
+      pools[name] = spaceKeep[name].map((k) => all[k]).filter((i) => i != null);
+      if (!pools[name].length) throw new Error(`no clips for "${name}" (${id}); cut it into picture clips first`);
+    }
+    pools.moon = [...pools.rover, ...pools.hops];
+    pools.disco = [...pools.ball, ...pools.mirror];
+    // Interleaved so consecutive cuts change place: club, street, festival, beach, the 1920s.
+    const mix = (...lists) => { const out = []; for (let k = 0; out.length < lists.reduce((n, l) => n + l.length, 0); k++) for (const l of lists) if (l[k] != null) out.push(l[k]); return out; };
+    pools.night = mix(pools.rave, pools.club);
+    pools.day = mix(pools.streets, pools.pair, pools.crowd, pools.beach, pools.line, pools.fest);
+    pools.party = mix(pools.rave, pools.streets, pools.stage, pools.club, pools.pair, pools.crowd, pools.vintage, pools.beach, pools.line, pools.fest);
+    return pools;
+  }
+  // Any record, tracked, with bar numbers that follow the app's one-bar clips (as trackChips does).
+  async function trackSong(id, hintBpm) {
+    const s = state.sources.find((x) => x.id === id);
+    if (!s) throw new Error(`source ${id} is not in the library`);
+    const song = byTime(padsOf(id));
+    if (song.length < 16) throw new Error(`${s.title} has ${song.length} bar clips; cut it whole in one-bar clips first`);
+    const tr = await window.api.beats({ file: s.file, bpm: s.bpm || hintBpm });
+    const at8 = state.pads[song[8]].start;
+    let i8 = 0;
+    tr.beats.forEach((t, i) => { if (Math.abs(t - at8) < Math.abs(tr.beats[i8] - at8)) i8 = i; });
+    const barIndex = i8 - 32;
+    const barTime = (b) => followSongTime({ beats: tr.beats, down: barIndex }, b * 16);
+    return { s, song, tr, barIndex, barTime, snap: Math.abs(tr.beats[i8] - at8) };
+  }
+
+  async function mothershipVideo() {
+    const { s, tr, barTime, snap } = await trackSong(MOTHERSHIP, 128);
+    const pools = spacePools();
+    const A = decks[0];
+    await cueChips(A, s, Math.max(0, barTime(0)));
+    applyVolumes();
+    setDeckLowCut(0);
+    setDeckBass(A, 1);
+    const BARS = 114;
+    const timeOf = (b) => (barTime(b) - barTime(0)) * 1000;
+    const { cuts, section, faster } = picturePlan(pools, 240 / tr.bpm);
+    section(0, 8, 2, ['andromeda', 'cupola', 'andromeda', 'cupola'], true); // contact: deep space, then Earth
+    section(8, 12, faster(8, 12), ['launch']); // ignition
+    section(12, 20, 1, ['warp', 'launch', 'warp', 'warp']); // leaving Earth at warp
+    // From bar 20 on, about three cuts in four are people dancing; the disco-ball and laser loops are
+    // seasoning, and the light effects put the disco on the dancers themselves.
+    section(20, 30, 1, ['spacewalk', 'beach', 'day', 'mirror', 'cupola', 'day']); // the signal reaches Earth: the first dancers
+    section(30, 32, 1, ['horsehead']); // the turn: the mothership's nebula
+    section(32, 48, 1, ['day', 'night', 'party', 'ball', 'day', 'stage', 'night', 'mirror']); // the party spreads: streets, beaches, clubs
+    section(48, 64, 1, ['party', 'night', 'day', 'lasers', 'party', 'stage', 'moon', 'party']); // everyone, everywhere (even on the Moon)
+    section(64, 70, faster(64, 70), ['party', 'night', 'lasers', 'day']);
+    // (The Horsehead clips last about 3.4 s, so they only fill one-bar cuts.)
+    section(70, 78, 2, ['cupola', 'andromeda', 'cupola', 'andromeda'], true); // the drift past Earth
+    section(78, 84, 1, ['party', 'night', 'warp', 'day']); // back in
+    section(84, 88, faster(84, 88), ['launch', 'warp']); // the second launch
+    section(88, 96, 1, ['party', 'night', 'day', 'mirror', 'party', 'stage']); // the last drop: full disco
+    section(96, 104, 1, ['party', 'day', 'moon', 'night', 'lasers', 'party']);
+    section(104, 112, (b) => (b < 108 ? 1 : 0.5), ['party', 'night', 'day', 'disco', 'party', 'stage', 'lasers']);
+    section(112, 114, 2, ['andromeda'], true); // home, far away
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm: tr.bpm, bars: BARS, keepDeckTime: true, timeOf,
+      info: { tracked: tr.bpm, snapMs: Math.round(snap * 1000), chosen: tr.chosen, cuts: cuts.length },
+      events(at) {
+        scheduleCuts(at, cuts);
+        const preset = (name, extra) => () => { fxPreset(name); if (extra) extra(); };
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { bpm: tr.bpm, follow: { deck: A, beats: tr.beats } });
+          fxPreset('cosmos');
+          setOutputTitle({ title: 'Mothership', sub: 'aWizard' });
+        });
+        at(6, () => setOutputTitle(null));
+        fxSections(at, [[0, 'intro'], [8, 'build'], [12, 'verse'], [20, 'verse'], [32, 'chorus'], [48, 'drop'], [70, 'breakdown'], [78, 'chorus'], [84, 'build'], [88, 'drop'], [112, 'outro']]);
+        at(8, preset('warp'));
+        at(12, () => { fxPreset('warp'); fxFlash(); });
+        at(20, preset('discoSpace'));
+        at(30, () => { fxPreset('cosmos'); fxText('CONTACT', { style: 'type', where: 'center', hold: 3.4 }); });
+        at(32, () => { fxPreset('discoSpace'); fxText(null); fxFlash(); });
+        at(40, () => fxAdd('lasers', { amount: 0.45, every: 4 }));
+        at(48, () => { fxPreset('laserShow'); fxFlash(); });
+        at(56, preset('discoSpace', () => fxAdd('starfield', { amount: 0.5, speed: 0.8 })));
+        at(64, preset('laserShow', () => fxAdd('discoBall', { amount: 0.5 })));
+        at(70, preset('cosmos'));
+        at(78, () => { fxPreset('laserShow'); fxFlash(); });
+        at(84, preset('warp'));
+        at(88, () => { fxPreset('discoSpace'); fxAdd('lasers', { amount: 0.5, every: 2 }); fxFlash(); });
+        // No strobe here: the laser loops flicker on their own, and with the strobe on top a second
+        // reached 3.5 flashes (check-video.js). The limiter only counts the effects' own flashes.
+        at(96, preset('laserShow', () => { fxRemove('strobe'); fxAdd('discoBall', { amount: 0.6 }); }));
+        at(104, preset('discoSpace', () => { fxAdd('starfield', { amount: 0.6, speed: 1.2 }); fxAdd('lasers', { amount: 0.5 }); }));
+        at(112, preset('cosmos'));
+        at(112.2, () => setOutputTitle({ title: 'Mothership', sub: 'aWizard', center: true }));
+      },
+    };
+  }
+
+  // ---------- "Lava Pit Chicken": a Minecraft storyline video ----------
+  // The user's Suno song (speechless, "Lava Pit Chicken x Lava Pit Chicken (Mashup)", 2:01) played
+  // as made, with a day-in-the-blocky-life story cut to its lyrics, one four-line section per four
+  // bars (the app's one-bar clips, 104 BPM; the beat tracker was unsure on this mix, so bars come
+  // from the clips): sunrise and punching a tree, the dirt house, the chicken by the lava, the
+  // creeper and the night, digging all day, skeletons' arrows, "You died" keyed over the action for
+  // "respawn", the lava chickens, mining deep, the zombies at dawn, and the chickens' dance at the end.
+  // Footage: other players' Minecraft videos (gameplay, cinematics), vetted on three-frame sheets.
+  const LAVA = 'lavaPitChicken';
+  const mcSources = {
+    day1: 'G8wYEOnhnpA', // a hardcore first day: punching trees, the crafting table, walking, digging dirt
+    craft: 'OijQNjJMTjs', // another first day: trees, the coast, mining stone
+    house: 'N4UQvealfd0', // building a cozy house (shaders)
+    shader: '_h5Vf9WOp1M', // cinematic: sunrise fields, a mine tunnel, night, the Nether's lava
+    sunrise: '1f-imcEiKKg', // the sun coming up
+    cine: 'QwR3VD7xXdw', // cinematic landscapes and a moonlit night
+    lava: '9aok7YMI2gA', // a huge lava lake
+    chickens: 'QA4rUwrRXyM', // chickens dancing (note blocks, a villager, ghasts), a player on fire
+    creeper: '6DsdgKi0R1I', // a giant creeper and a TNT creeper, the explosion
+    mines: 'ZCaVQqstmZk', // deep caves, glowing ore
+    skeleton: 'gCjmI93gSrY', // arrows down a corridor, skeletons
+    zombies: 'm6a6lWDDi44', // dusk, zombies burning at dawn
+    died: 'gcXjOf9PpQM', // the "You died!" screen on green (keyed with the chroma effect)
+  };
+  // Out (by eye from three-frame sheets): world menus, inventories and crafting screens, subtitles
+  // and narration captions, "Subscribe" end cards, a shader title card, a glitched green frame, the
+  // near-black night and cave stretches. A gravel-trap tutorial is out entirely (subtitled throughout).
+  const mcKeep = {
+    tree: [['day1', range(7, 13)], ['craft', range(18, 23)]],
+    walk: [['day1', range(21, 39)], ['craft', [8, 9, 10, 11, 12, 13, 32, 33, 34, 35]]],
+    dirt: [['day1', range(40, 46)]],
+    home: [['house', [6, 7, 8, 9, 14, 17, 18, 19, 21, 22, 23, 24, 25, 27, 29]]],
+    dawn: [['sunrise', [...range(0, 7), ...range(9, 15)]], ['shader', [2, 3, 4, 22, 23, 24, 25]]],
+    scenery: [['cine', [0, 3, 4, 8, 9, 11, 12, 13, 16, 18, 19, 21, 22, 23, 26]], ['shader', [17, 18, 19, 26, 27, 28, 29, 30, 31, 10, 11]]],
+    night: [['cine', [7, 15]], ['shader', [8, 9]], ['zombies', range(18, 23)]],
+    lava: [['lava', range(0, 15)], ['shader', [14, 15, 16]]],
+    chicken: [['chickens', [1, 2, 3, 4, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17]]],
+    party: [['chickens', [22, 23, 24, 25, 10, 12, 14, 16]]],
+    fire: [['chickens', [30]], ['zombies', range(24, 28)]],
+    creeper: [['creeper', [0, 1, 2, 5, 6, 8, 10, 11, 12, 13]]],
+    boom: [['creeper', [14, 15, 9]]],
+    mine: [['mines', [16, 17, 18, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 38, 39, 44, 47, 48, 49, 56, 58]], ['shader', [5, 6]]],
+    arrows: [['skeleton', range(26, 31)]],
+    died: [['died', [1]]],
+  };
+  function mcPools() {
+    const by = {};
+    for (const [name, id] of Object.entries(mcSources)) by[name] = clipsOf(id);
+    const pools = {};
+    for (const [name, parts] of Object.entries(mcKeep)) {
+      pools[name] = parts.flatMap(([src, ks]) => ks.map((k) => by[src][k])).filter((i) => i != null);
+      if (!pools[name].length) throw new Error(`no clips for "${name}"; cut the Minecraft footage first`);
+    }
+    return pools;
+  }
+
+  async function lavaChickenVideo() {
+    const s = state.sources.find((x) => x.id === LAVA);
+    if (!s) throw new Error('add the song as source "lavaPitChicken" first');
+    const song = byTime(padsOf(LAVA));
+    if (song.length < 50) throw new Error(`the song has ${song.length} bar clips; cut it whole in one-bar clips first`);
+    const starts = song.map((i) => state.pads[i].start);
+    const barLen = (starts[starts.length - 1] - starts[0]) / (starts.length - 1);
+    const bpm = 240 / barLen;
+    const barAt = (b) => (b < starts.length ? starts[Math.floor(b)] + (b % 1) * barLen : starts[0] + b * barLen);
+    const pools = mcPools();
+    const A = decks[0];
+    await cueChips(A, s, starts[0]);
+    applyVolumes();
+    setDeckLowCut(0);
+    setDeckBass(A, 1);
+    const BARS = 53;
+    const timeOf = (b) => (barAt(b) - starts[0]) * 1000;
+    const { cuts, section } = picturePlan(pools, barLen);
+    const lines = (from, names) => names.forEach((n, k) => section(from + k, from + k + 1, 1, Array.isArray(n) ? n : [n]));
+    section(0, 4, 1, ['dawn', 'scenery', 'lava', 'dawn']); // intro: "da-na-na… pew, pew"
+    lines(4, ['tree', 'dawn', 'dirt', 'chicken']); // punch a tree / sun is barely up / dirt house dream / pet chicken on a lava pit
+    lines(8, ['creeper', 'creeper', 'night', 'walk']); // creeper hiss / heart hits harder / spider eyes in the grass / trip on a block
+    section(12, 16, 1, ['scenery', 'home', 'scenery', 'dawn']); // melodic interlude
+    lines(16, ['walk', 'mine', 'arrows', 'died']); // blocky life / diggin' all day, runnin' all night / skeletons aim / I respawn
+    lines(20, ['chicken', 'lava', 'fire', 'party']); // lava chickens on my lawn / feather, fire / zombies moan / lava chicken song
+    lines(24, ['mine', 'arrows', 'arrows', 'mine']); // mine so deep / a bony bow string / arrow flies / drop some gravel
+    lines(28, ['home', 'night', 'fire', 'walk']); // spider jump on my roof / a little thump / baby zombie / chasin' me down
+    section(32, 36, 1, ['scenery', 'dawn', 'scenery', 'lava']); // transition
+    lines(36, ['walk', 'mine', 'arrows', 'died']); // the chorus again
+    lines(40, ['chicken', 'lava', 'fire', 'party']);
+    section(44, 48, 0.5, ['party', 'chicken', 'lava', 'party']); // "da-da-da… pew, pew… lava bird crew"
+    section(48, 52, 1, ['boom', 'boom', 'boom', 'boom']); // "boom, boom, boom, boom"
+    section(52, 53, 1, ['dawn'], true); // "and it's over"
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm, bars: BARS, keepDeckTime: true, timeOf,
+      info: { bpm: +bpm.toFixed(2), barLen: +barLen.toFixed(3), cuts: cuts.length },
+      events(at) {
+        scheduleCuts(at, cuts);
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { bpm, t0: performance.now() / 1000, follow: null });
+          fxPreset('off');
+          fxUse([['zoomPunch', { amount: 0.25, every: 2 }]]);
+          setOutputTitle({ title: 'Lava Pit Chicken', sub: 'speechless' });
+        });
+        at(3, () => setOutputTitle(null));
+        // "pew, pew": two light punches; the creeper's hiss: a shake; the night: night vision.
+        for (const b of [2, 2.5, 46, 46.5]) at(b, () => fxFlash());
+        at(8, () => fxAdd('shake', { amount: 0.5, every: 1 }));
+        at(10, () => { fxRemove('shake'); fxAdd('nightVision', { amount: 0.5 }); });
+        at(11, () => fxRemove('nightVision'));
+        // "I respawn": the death screen keyed over the clip before it.
+        for (const b of [19, 39]) { at(b + 0.02, () => fxAdd('chroma', { key: '#18ff30', tolerance: 0.35 })); at(b + 0.98, () => fxRemove('chroma')); }
+        at(28, () => fxAdd('nightVision', { amount: 0.45 }));
+        at(29, () => fxRemove('nightVision'));
+        for (const b of [48, 49, 50, 51]) at(b, () => { fxFlash(); fxAdd('shake', { amount: 0.7, every: 1 }); });
+        at(52, () => { fxRemove('shake'); setOutputTitle({ title: 'Lava Pit Chicken', sub: 'speechless', center: true }); });
+      },
+    };
+  }
+
+  // ---------- "Empty Packs, Endless Worlds": the whole Minecraft journey ----------
+  // The user's Suno song (speechless, 3:22, 98.9 BPM, 83 bars; lyrics embedded in the MP3), played as
+  // made. One lyric line a bar, sections by structure (intro 0-3, verse 4-15, chorus 16-23, verse
+  // 24-31, chorus 32-39, break 40-47, bridge 48-55, chorus 56-63, break 64-71, outro 72-79, end
+  // 80-82): from nothing but sky and rock, the first tree and axe, the zombie and the creeper, a home
+  // from dirt and torches, a hut under a red sky, the furnace, the mines and the lava, then the Nether
+  // portal, the fortress and the End's dragon, and back to the world they made. It reuses the Lava
+  // Pit Chicken crate (mcKeep) and adds the Nether, the End, a torch-lit village and a furnace.
+  const PACKS = 'emptyPacks';
+  const packsSources = {
+    portal: 'IVg8rTdVbq8', // building and lighting a Nether portal, the Nether, a savanna sunset
+    fortress: 'VtYxDNsefp0', // a Nether fortress (mostly dark; only its lava shots)
+    dragon: 'k-JTZRB4A5I', // the End and the Ender Dragon (a mod HUD on screen; only clean shots)
+    village: 'Lbm9vn7y-G8', // a torch-lit village at night (shaders)
+    basics: 'I835y2dJ-F4', // an axe at a tree, a crafting table, the furnace, a torch (its subtitled clips out)
+  };
+  const packsKeep = {
+    gate: [['portal', [16, 17, 34, 35, 36, 37, 47]]],
+    hell: [['portal', [18, 19, 25, 26, 27]], ['fortress', [0, 8, 11, 12]]],
+    redsky: [['portal', [45, 46]], ['cine', [0, 3, 4, 11, 12]]],
+    end: [['dragon', [6, 10, 11, 18, 19, 51, 53, 59]]],
+    torches: [['village', [3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16]]],
+    axe: [['basics', [6, 7]]],
+    furnace: [['basics', [21, 32, 33]]],
+  };
+  function packsPools() {
+    const pools = mcPools();
+    const by = {};
+    for (const [name, id] of Object.entries({ ...mcSources, ...packsSources })) by[name] = clipsOf(id);
+    for (const [name, parts] of Object.entries(packsKeep)) {
+      pools[name] = parts.flatMap(([src, ks]) => ks.map((k) => by[src][k])).filter((i) => i != null);
+      if (!pools[name].length) throw new Error(`no clips for "${name}"; cut the new footage first`);
+    }
+    return pools;
+  }
+
+  async function emptyPacksVideo() {
+    const s = state.sources.find((x) => x.id === PACKS);
+    if (!s) throw new Error('add the song as source "emptyPacks" first');
+    const song = byTime(padsOf(PACKS));
+    if (song.length < 80) throw new Error(`the song has ${song.length} bar clips; cut it whole in one-bar clips first`);
+    const starts = song.map((i) => state.pads[i].start);
+    const barLen = (starts[starts.length - 1] - starts[0]) / (starts.length - 1);
+    const bpm = 240 / barLen;
+    const barAt = (b) => (b < starts.length ? starts[Math.floor(b)] + (b % 1) * barLen : starts[0] + b * barLen);
+    const pools = packsPools();
+    const A = decks[0];
+    await cueChips(A, s, starts[0]);
+    applyVolumes();
+    setDeckLowCut(0);
+    setDeckBass(A, 1);
+    const BARS = 83;
+    const timeOf = (b) => (barAt(b) - starts[0]) * 1000;
+    const { cuts, section } = picturePlan(pools, barLen);
+    const lines = (from, names) => names.forEach((n, k) => section(from + k, from + k + 1, 1, [n]));
+    const chorus = (from) => lines(from, ['mine', 'dawn', 'dirt', 'home', 'mine', 'torches', 'scenery', 'home']);
+    section(0, 4, 2, ['dawn', 'scenery'], true); // here we start as a block / just sky and rock
+    lines(4, ['tree', 'scenery', 'axe', 'walk', 'home', 'walk', 'night', 'fire', 'night', 'fire', 'creeper', 'boom']); // verse 1: tree, axe, empty packs, the zombie, "pew", the creeper
+    chorus(16); // from empty packs to glowing stacks… torches along our tracks
+    lines(24, ['redsky', 'home', 'furnace', 'night', 'lava', 'mine', 'creeper', 'mine']); // verse 2: hut under a red sky, bed, ovens glow, spiders, lava, caves, the hiss, the abyss
+    chorus(32);
+    section(40, 46, 1, ['walk', 'chicken', 'scenery', 'arrows', 'lava', 'party']); // break: the adventure goes on
+    section(46, 48, 1, ['gate']); // the portal hums into the bridge
+    lines(48, ['gate', 'hell', 'hell', 'end', 'end', 'end', 'end', 'end']); // bridge: Nether gates, the bloody night, blaze rods, ender eyes, the void, pearls, the dragon, the obsidian stair
+    chorus(56);
+    section(64, 72, 1, ['dawn', 'chicken', 'torches', 'lava', 'party', 'scenery', 'walk', 'dawn']); // break
+    lines(72, ['torches', 'scenery', 'walk', 'torches', 'scenery', 'torches', 'torches', 'dawn']); // outro: the world we made, torches burning, one more world
+    section(80, 83, 1, ['dawn', 'scenery', 'dawn'], true); // (one-bar cuts: no dawn clip lasts three bars)
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm, bars: BARS, keepDeckTime: true, timeOf,
+      info: { bpm: +bpm.toFixed(2), barLen: +barLen.toFixed(3), cuts: cuts.length },
+      events(at) {
+        scheduleCuts(at, cuts);
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { bpm, t0: performance.now() / 1000, follow: null });
+          fxPreset('off');
+          fxUse([['zoomPunch', { amount: 0.2, every: 4 }]]);
+          setOutputTitle({ title: 'Empty Packs, Endless Worlds', sub: 'speechless' });
+        });
+        at(3.5, () => setOutputTitle(null));
+        at(14, () => fxAdd('shake', { amount: 0.4, every: 1 })); // the creeper
+        at(15, () => { fxFlash(); fxRemove('shake'); });
+        at(24, () => fxAdd('grade', { look: 'warm', amount: 0.5 })); // the sky turns red
+        at(26, () => fxRemove('grade'));
+        at(48, () => fxAdd('glow', { amount: 0.4 })); // the bridge: Nether and End glow
+        at(56, () => fxRemove('glow'));
+        at(80, () => setOutputTitle({ title: 'Empty Packs, Endless Worlds', sub: 'speechless', center: true }));
+      },
+    };
+  }
+
   // ---------- variants ----------
   const variants = {
+    emptyPacksVideo,
+    lavaChickenVideo,
+    mothershipVideo,
     fxSampler,
     rodeoVideo,
     rodeoEdit,
@@ -1094,7 +1486,11 @@
       rrTone: tones[0] != null ? tones[0] : rrAll[0],
     };
     L.rrRoot = L.rrTone != null && state.pads[L.rrTone].root != null ? state.pads[L.rrTone].root : 60;
-    for (const [k, v] of Object.entries({ td: L.td, gold: L.gold, pp: L.pp, pg: L.pg, rr: L.rr })) if (v.length < 2) throw new Error(`not enough clips for "${k}"`);
+    // The first crate (songs and Road Runner sounds) is only needed by the pieces built on it; the
+    // music videos bring their own sources, so they run on a library that no longer holds it.
+    const OWN_CRATE = ['emptyPacksVideo', 'lavaChickenVideo', 'mothershipVideo', 'rodeoVideo', 'rodeoEdit', 'rodeoFull', 'fxSampler'];
+    const crateOk = Object.values({ td: L.td, gold: L.gold, pp: L.pp, pg: L.pg, rr: L.rr }).every((v) => v.length >= 2);
+    if (!OWN_CRATE.includes(window.__demoVariant)) for (const [k, v] of Object.entries({ td: L.td, gold: L.gold, pp: L.pp, pg: L.pg, rr: L.rr })) if (v.length < 2) throw new Error(`not enough clips for "${k}"`);
 
     caption = document.createElement('div');
     caption.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:999;padding:10px 22px;border-radius:10px;'
@@ -1113,7 +1509,7 @@
     return {
       variant, bpm: run.bpm, bars: run.bars, info: run.info, loaded: rt.filter((r) => r.buffer).length, of: want, pages: pageCount(),
       tempos: { td: L.tdBpm, gold: L.goldBpm, pg: L.pgBpm }, td: L.td.map(name), pg: L.pg.map(name), rr: L.rr.map(name),
-      rrTone: name(L.rrTone), rrRoot: L.rrRoot, levels: [L.td[0], L.gold[0], L.pp[0], L.pg[0], L.rr[0]].map((i) => +(20 * Math.log10(rt[i].level.norm)).toFixed(1)),
+      rrTone: L.rrTone != null ? name(L.rrTone) : null, rrRoot: L.rrRoot, levels: crateOk ? [L.td[0], L.gold[0], L.pp[0], L.pg[0], L.rr[0]].map((i) => +(20 * Math.log10(rt[i].level.norm)).toFixed(1)) : null,
     };
   };
 

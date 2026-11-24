@@ -14,7 +14,8 @@
 // Paint order (each stage reads the one before):
 //   1 timing   2 motion (zoom punch, shake, film weave)   3 picture (plain, stutter/freeze, or a
 //   composition: split, pip, double, chroma)   4 Shroom color   5 looks (grade, duotone, thermal,
-//   night vision, halftone, film, vhs)   6 mirror   7 trails   8 strobe and flash   9 text
+//   night vision, halftone, film, vhs)   6 mirror   7 trails   7b light (glow, warp stars, mirror
+//   ball, lasers)   8 strobe and flash   9 text
 //
 // Safety: every full-frame flash (strobe, fxFlash) goes through one limiter that allows at most three
 // a second, the photosensitive-epilepsy line broadcasters use. scripts/check-video.js measures it too.
@@ -54,6 +55,10 @@ const FX_CATALOG = {
   chroma: { group: 'compose', label: 'Chroma key', about: 'removes a key color from the current clip; the previous clip shows through', defaults: { amount: 1, key: '#00ff00', tolerance: 0.32 } },
   mirror: { group: 'look', label: 'Kaleidoscope', about: 'mirrors left to right and top to bottom', defaults: { amount: 1 } },
   trails: { group: 'look', label: 'Trails', about: 'zoomed ghosts of the last frames', defaults: { amount: 0.5 } },
+  starfield: { group: 'light', label: 'Warp stars', about: 'stars streaking out from the center, surging on the beat', defaults: { amount: 0.7, speed: 1, count: 220, every: 1 } },
+  discoBall: { group: 'light', label: 'Mirror ball', about: 'colored light spots sweeping round the frame, flaring on the beat', defaults: { amount: 0.7, spots: 70, every: 1 } },
+  lasers: { group: 'light', label: 'Lasers', about: 'colored beams fanning up from below, sweeping, changing color on the beat', defaults: { amount: 0.7, beams: 7, every: 2 } },
+  glow: { group: 'light', label: 'Glow', about: 'bloom: the bright parts of the picture bleed light', defaults: { amount: 0.5 } },
 };
 
 // Presets by mood. Each is a Shroom mode and a stack. Scripts call fxPreset(name); the menu lists them.
@@ -72,6 +77,10 @@ const FX_PRESETS = {
   brand: { mode: 'off', effects: [['duotone', { amount: 0.85 }], ['zoomPunch', { amount: 0.4 }]] },
   splitBeat: { mode: 'off', effects: [['split', { panes: 4 }], ['zoomPunch', { amount: 0.4 }]] },
   dream: { mode: 'off', effects: [['double', { amount: 0.5 }], ['trails', { amount: 0.6 }], ['grade', { look: 'warm', amount: 0.5 }]] },
+  discoSpace: { mode: 'off', effects: [['grade', { look: 'neon', amount: 0.55 }], ['discoBall', { amount: 0.75 }], ['glow', { amount: 0.45 }], ['zoomPunch', { amount: 0.4 }]] },
+  warp: { mode: 'off', effects: [['starfield', { amount: 0.9, speed: 1.4 }], ['glow', { amount: 0.4 }], ['zoomPunch', { amount: 0.5 }]] },
+  laserShow: { mode: 'off', effects: [['grade', { look: 'cold', amount: 0.5 }], ['lasers', { amount: 0.85 }], ['glow', { amount: 0.5 }], ['strobe', { amount: 0.45, every: 8 }]] },
+  cosmos: { mode: 'off', effects: [['starfield', { amount: 0.45, speed: 0.4 }], ['double', { amount: 0.4 }], ['glow', { amount: 0.55 }]] },
 };
 
 // Section intensity, for fxSection(kind): how much of every effect a part of a song gets.
@@ -606,6 +615,10 @@ function fxPaint(g, canvas, layers) {
   pg.globalCompositeOperation = 'copy';
   pg.drawImage(canvas, 0, 0);
 
+  // 7b. Light: glow, warp stars, mirror-ball spots and lasers, added in light ("screen"/"lighter")
+  // after the trails are taken, so they never smear into ghosts. None is a full-frame flash.
+  fxPaintLight(g, canvas, W, H, now, tm, E);
+
   // 8. Strobe: full-frame flash frames on the beat, through the flash limiter (3 a second at most).
   const sb = E('strobe');
   if (sb && sb.amt > 0) {
@@ -627,6 +640,125 @@ function fxPaint(g, canvas, layers) {
 
   // 9. Text.
   if (fx.text) fxPaintText(g, W, H, now, tm);
+  g.restore();
+}
+
+// A fixed pseudo-random number for item i (stars, spots), the same every frame.
+function fxSeed(i, salt) { const x = Math.sin((i + 1) * 91.345 + salt * 47.853) * 24634.6345; return x - Math.floor(x); }
+const FX_LIGHT_COLORS = ['#ff3df2', '#36e7ff', '#ffe23d', '#7dff5a', '#ff7a2e', '#a46bff'];
+
+function fxPaintLight(g, canvas, W, H, now, tm, E) {
+  const gl = E('glow');
+  const sf = E('starfield');
+  const db = E('discoBall');
+  const lz = E('lasers');
+  if (!gl && !sf && !db && !lz) return;
+  const S = Math.min(W, H);
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Glow: a blurred copy of the bright parts, screened back on.
+  if (gl && gl.amt > 0) {
+    const t = scratch(canvas, 'glow', Math.max(1, W >> 2), Math.max(1, H >> 2));
+    const tg = t.getContext('2d');
+    tg.globalCompositeOperation = 'copy';
+    tg.filter = `brightness(0.75) contrast(2.2) blur(${Math.max(1, Math.round(S / 160))}px)`;
+    tg.drawImage(canvas, 0, 0, t.width, t.height);
+    tg.filter = 'none';
+    g.globalCompositeOperation = 'screen';
+    g.globalAlpha = Math.min(1, gl.amt * 1.1);
+    g.drawImage(t, 0, 0, W, H);
+    g.globalAlpha = 1;
+  }
+
+  // Warp stars: each star flies out from the center along its own ray; the beat pushes the speed.
+  if (sf && sf.amt > 0) {
+    const n = Math.max(20, Math.min(600, sf.count | 0));
+    const surge = 1 + 2.2 * fxHit(tm, sf.every, 3);
+    // Distance is time-based with a beat surge folded in as extra travel (beats so far, eased).
+    const travel = now * 0.16 * sf.speed + 0.05 * sf.speed * (Math.floor(tm.count / sf.every) + (1 - Math.pow(1 - ((tm.count / sf.every) % 1), 3)));
+    const cx = W / 2;
+    const cy = H / 2;
+    const R = Math.hypot(W, H) / 2;
+    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const ang = fxSeed(i, 1) * Math.PI * 2;
+      const z = (fxSeed(i, 2) + travel * (0.6 + 0.8 * fxSeed(i, 3))) % 1; // 0 = far, 1 = here
+      const d = Math.pow(z, 2.4) * R;
+      const len = Math.max(1, d * 0.09 * sf.speed * surge);
+      const x = cx + Math.cos(ang) * d;
+      const y = cy + Math.sin(ang) * d;
+      const x0 = cx + Math.cos(ang) * Math.max(0, d - len);
+      const y0 = cy + Math.sin(ang) * Math.max(0, d - len);
+      const b = Math.min(1, z * 1.4) * sf.amt;
+      g.strokeStyle = fxSeed(i, 4) < 0.18 ? `rgba(160,210,255,${b})` : `rgba(255,255,255,${b})`;
+      g.lineWidth = Math.max(0.6, (S / 360) * (0.5 + 1.6 * z));
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x, y);
+      g.stroke();
+    }
+  }
+
+  // Mirror ball: spots on a turning sphere projected round the room; they sweep left to right,
+  // swell on the beat and shift color every bar.
+  if (db && db.amt > 0) {
+    const n = Math.max(10, Math.min(200, db.spots | 0));
+    const hit = fxHit(tm, db.every, 4);
+    const turn = now * 0.35;
+    const bar = Math.floor(tm.count / 4);
+    g.globalCompositeOperation = 'screen';
+    for (let i = 0; i < n; i++) {
+      const lon = fxSeed(i, 5) * Math.PI * 2 + turn;
+      const lat = (fxSeed(i, 6) - 0.5) * 1.2;
+      const facing = Math.cos(lon); // only spots on the near side reach the wall
+      if (facing < 0.05) continue;
+      const x = W / 2 + Math.sin(lon) * W * 0.62;
+      const y = H / 2 + Math.sin(lat) * H * 0.62 + Math.cos(lon) * lat * H * 0.08;
+      const r = (S / 70) * (0.6 + 0.6 * fxSeed(i, 7)) * (1 + 0.6 * hit) * (0.6 + 0.4 * facing);
+      const col = FX_LIGHT_COLORS[(i + bar) % FX_LIGHT_COLORS.length];
+      const [cr, cgc, cb] = hexRgb(col);
+      const al = db.amt * (0.35 + 0.45 * hit) * facing;
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, `rgba(255,255,255,${al})`);
+      grad.addColorStop(0.35, `rgba(${cr},${cgc},${cb},${al})`);
+      grad.addColorStop(1, `rgba(${cr},${cgc},${cb},0)`);
+      g.fillStyle = grad;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
+
+  // Lasers: thin beams from a point below the frame, sweeping; the set changes color on the beat.
+  if (lz && lz.amt > 0) {
+    const n = Math.max(2, Math.min(24, lz.beams | 0));
+    const step = Math.floor(tm.count / lz.every);
+    const hit = fxHit(tm, lz.every, 3);
+    const ox = W / 2;
+    const oy = H * 1.05;
+    const L = Math.hypot(W, H) * 1.3;
+    const sweep = Math.sin(now * 0.9) * 0.55;
+    const col = FX_LIGHT_COLORS[step % FX_LIGHT_COLORS.length];
+    const [cr, cgc, cb] = hexRgb(col);
+    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'butt';
+    for (let i = 0; i < n; i++) {
+      const spread = (i / (n - 1) - 0.5) * (1.1 + 0.4 * hit);
+      const ang = -Math.PI / 2 + spread + sweep * (i % 2 ? 1 : -1);
+      const x1 = ox + Math.cos(ang) * L;
+      const y1 = oy + Math.sin(ang) * L;
+      for (const [w, a] of [[S / 60, 0.12], [S / 220, 0.55], [S / 700, 0.9]]) {
+        g.strokeStyle = `rgba(${cr},${cgc},${cb},${a * lz.amt * (0.65 + 0.35 * hit)})`;
+        g.lineWidth = Math.max(0.5, w);
+        g.beginPath();
+        g.moveTo(ox, oy);
+        g.lineTo(x1, y1);
+        g.stroke();
+      }
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
   g.restore();
 }
 
@@ -715,11 +847,11 @@ function initFx() {
   fxCanvas.hidden = true;
   $('viewer').appendChild(fxCanvas);
   const sel = $('fxMode');
-  const names = { off: 'Off', shroom: 'Shroom', shroomMirror: 'Shroom + mirror', rodeo: 'Rodeo', archival: 'Archival film', vhsParty: 'VHS party', neonClub: 'Neon club', comic: 'Comic', heat: 'Heat', nightVision: 'Night vision', noir: 'Noir', brand: 'Brand duotone', splitBeat: 'Split on the beat', dream: 'Dream' };
+  const names = { off: 'Off', shroom: 'Shroom', shroomMirror: 'Shroom + mirror', rodeo: 'Rodeo', archival: 'Archival film', vhsParty: 'VHS party', neonClub: 'Neon club', comic: 'Comic', heat: 'Heat', nightVision: 'Night vision', noir: 'Noir', brand: 'Brand duotone', splitBeat: 'Split on the beat', dream: 'Dream', discoSpace: 'Disco space', warp: 'Warp', laserShow: 'Laser show', cosmos: 'Cosmos' };
   sel.innerHTML = Object.keys(FX_PRESETS).map((k) => `<option value="${k}">${names[k] || k}</option>`).join('') + '<option value="custom">Custom</option>';
   // The effects panel: every effect, tick to add or remove it.
   const panel = $('fxPanel');
-  const groups = { beat: 'On the beat', look: 'Looks', compose: 'Compose' };
+  const groups = { beat: 'On the beat', look: 'Looks', light: 'Light', compose: 'Compose' };
   panel.innerHTML = Object.entries(groups).map(([g, label]) => `<div class="fxGroup"><b>${label}</b>${Object.entries(FX_CATALOG).filter(([, c]) => c.group === g).map(([k, c]) => `<label title="${c.about}"><input type="checkbox" data-fx="${k}"> ${c.label}</label>`).join('')}</div>`).join('');
   panel.addEventListener('change', (e) => {
     const k = e.target.dataset.fx;

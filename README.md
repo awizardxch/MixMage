@@ -22,9 +22,10 @@ It is the digital, AI-era take on 1980s turntable mixing and sampling.
   low-cut sweep for builds.
 - **One viewer.** Shows whatever is playing, with dissolves between clips.
 - **Music-video effects.** Presets by mood (Shroom, Rodeo, Archival film, VHS party, Neon club, Comic,
-  Heat, Night vision, Noir, Brand duotone, Split on the beat, Dream) or any mix of single effects:
-  zoom punch, shake, strobe, stutter, freeze, film, VHS, color grades, duotone, halftone, thermal, night
-  vision, kaleidoscope, trails, split screen, picture in picture, double exposure, chroma key, and
+  Heat, Night vision, Noir, Brand duotone, Split on the beat, Dream, Disco space, Warp, Laser show,
+  Cosmos) or any mix of single effects: zoom punch, shake, strobe, stutter, freeze, film, VHS, color
+  grades, duotone, halftone, thermal, night vision, kaleidoscope, trails, warp stars, mirror-ball
+  light, lasers, glow, split screen, picture in picture, double exposure, chroma key, and
   beat-timed text. They pulse on the song's tracked beats, show in the viewer and record into the
   output. Strobes are capped at 3 flashes a second.
 - **Recording.** Record pads into a deck, or record the final output with titles to MP4.
@@ -64,6 +65,9 @@ These measure a mix when you cannot listen to it, so a script or an agent can ch
 - `node scripts/original-audio.js <render> <original> <out> [originalTimeAtStart]`: lays a record's own
   sound under a rendered video, lined up to the millisecond.
 - `node scripts/check-video.js <video>`: dark, washed-out and frozen stretches, and the flash rate.
+- `.venv-whisper/Scripts/python.exe scripts/lyrics-align.py <audio> <lyrics.txt> <out.json> [model]`:
+  when each lyric line is sung, from local speech-to-text (faster-whisper; set up with
+  `py -3 -m venv .venv-whisper` and `pip install faster-whisper`). Nothing is uploaded.
 - `node scripts/beat-phase.js <file> <bpm> <from> <to>`: whether added drums land on the song's beat.
 
 `.claude/skills/mixmage-producer` is a skill that teaches an agent to produce finished pieces with

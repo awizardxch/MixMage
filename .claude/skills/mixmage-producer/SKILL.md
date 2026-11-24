@@ -33,6 +33,7 @@ the user plainly which judgments are measured and which are theirs to make by ea
 | Finding every beat | `node scripts/beats.js <file> <bpm hint> [--json out.json]`: tracks each beat (src/beats.js: librosa's dynamic-programming tracker on log-band flux, Essentia's multi-feature agreement, aubio's HFC and peak picking, HPSS bass roots with a confidence), prints tempo per 8 bars (a live band drifts) |
 | Hearing whether the added kick is on the band | `node scripts/sync-check.js <render> <song> <beats.json> <from> <to>`: matched-filters the beat box's kick in the render against the song's tracked beats; in sync = median within ~5 ms, most beats within 15 ms |
 | Hearing whether the added parts are subtle | `node scripts/compare-mix.js <remix> <original> <from> <to> [originalTimeAtFrom]`: each band's share of the total in the original and the remix over the same music. Subtle = low bands within +2 dB, the rest within 1.5 dB; mids losing share means the added beat buries the voice and guitars. Give the last argument when the song repeats itself, or it can match the wrong chorus |
+| Knowing when each lyric line is sung | `.venv-whisper/Scripts/python.exe scripts/lyrics-align.py <audio> <lyrics.txt> <out.json> medium`: local Whisper word times, then every line matched to them globally. `medium` timed all 58 lines of one song; on another it hallucinated "na-na" over a verse that `small` heard correctly, so run both and combine when scores are low. Never time a storyline by assuming four bars per four lines: that put the pictures on the wrong lines. Suno MP3s carry their lyrics in a `lyrics-eng` tag |
 | Watching for dark, washed-out, frozen or flashing picture | `node scripts/check-video.js <video>`: DARK/WASHED/FROZEN stretches and the worst flashes per second (over 3 fails) |
 | Hearing a flam | `node scripts/beat-phase.js <file> <bpm> <from> <to>`: folds low-band onsets over the beat; one peak = added drums land with the song, two = they don't |
 
@@ -78,6 +79,7 @@ Existing variants (all in `scripts/demo-performance.js`, in the `variants` objec
 | `rodeoEdit` | "Chips" (country rock) as a 33-bar dance edit: beat box following the band, build and drop, Shroom FX over rodeo footage |
 | `rodeoFull` | The whole of "Chips" (5:43, every lyric) as a dance record: three builds, four drops, two breakdowns, picture telling the song |
 | `fxSampler` | Every effect preset in turn over "Chips", named on screen, then text and a freeze |
+| `mothershipVideo` | aWizard's "Mothership" exactly as recorded: a disco-in-space story (contact, launch, warp, spacewalk under the mirror ball, then everyone dancing everywhere: streets, rooftops, beaches, clubs, raves, festivals, 1920s dance halls, moon hops; a drift past Earth for the breakdown). The user turned down the space-station crew as the dancers: party footage should be people having fun in many places, not one group cut to its tracked bars, with the light presets; then `original-audio.js`. `trackSong(id, bpm)` tracks any record with the app's bar numbers |
 | `rodeoVideo` | The music video: "Chips" exactly as recorded, the rodeo story cut to its tracked bars, Shroom FX pulsing on the band's beats; then `original-audio.js` lays in the record's own sound |
 
 **When the user wants the song itself** (they did, after hearing the dance versions): play it from
@@ -228,6 +230,10 @@ every preset in turn, named on screen.
 | `brand` | Duotone in Forge colors (`dark`, `light` settable) | promos |
 | `splitBeat` | Four panes of recent clips trading places every two beats | call and response, montage |
 | `dream` | Double exposure, trails, warm grade | intros, ballads |
+| `discoSpace` | Neon grade, mirror-ball light spots, glow, zoom punch | disco, space, a party section |
+| `warp` | Warp stars surging on the beat, glow, zoom punch | launches, builds, leaving Earth |
+| `laserShow` | Cold grade, sweeping lasers, glow, a strobe every 8 beats | the peak, club drops |
+| `cosmos` | Slow stars, double exposure, glow | space intros, breakdowns, outros |
 
 **Single effects** (`fxUse([...])`, `fxAdd(name, settings)`, `fxSet`, `fxRemove`; each takes an
 `amount` 0..1, defaults in `FX_CATALOG`):
@@ -237,6 +243,10 @@ every preset in turn, named on screen.
 - Looks: `film` {grain, scratches, flicker, weave, fade}, `vhs` {stamp}, `grade` {look: sepia, noir,
   warm, cold, tealOrange, neon}, `duotone` {dark, light}, `halftone` {cell}, `thermal`,
   `nightVision`, `mirror`, `trails`.
+- Light (added on top in light, after the trails, so they never smear; none is a full-frame flash):
+  `starfield` {speed, count, every: the surge}, `discoBall` {spots, every}, `lasers` {beams, every:
+  the color change}, `glow` (bloom). They also work over footage that is mostly black, which is
+  where most space footage lives.
 - Compose (they use the clips shown before the current one): `split` {panes 2|4}, `pip` {size,
   corner 'tl'|'tr'|'bl'|'br'}, `double`, `chroma` {key '#00ff00', tolerance}.
 - Text: `fxText(text, { style: 'caption'|'pop'|'type'|'slide', where: 'bottom'|'center'|'top',

@@ -2,3 +2,6 @@ node_modules/
 bin/
 demo/
 *.log
+
+# local speech-to-text for lyric timing (scripts/lyrics-align.py)
+.venv-whisper/
