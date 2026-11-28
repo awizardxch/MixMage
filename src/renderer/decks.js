@@ -47,10 +47,38 @@ function tapElement(el) {
   bass.type = 'lowshelf';
   bass.frequency.value = 180;
   bass.gain.value = 0;
+  // A DJ filter after it (setDeckFilter): a high-pass and a low-pass in series, both resting open.
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 20;
+  hp.Q.value = 0.9;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 20000;
+  lp.Q.value = 0.9;
   const gain = ctx.createGain();
-  node.connect(bass).connect(gain).connect(deckBus);
+  node.connect(bass).connect(hp).connect(lp).connect(gain).connect(deckBus);
   gain.bass = bass;
+  gain.hp = hp;
+  gain.lp = lp;
   return gain;
+}
+
+// The DJ's one-knob filter on a deck, ramped over `seconds`: 0 = open; toward +1 a high-pass rises
+// (20 Hz to 2.5 kHz: only the hats and the top line are left, how an incoming record is teased in);
+// toward -1 a low-pass closes (20 kHz to 180 Hz: the record sinks to a muffled thud, how an outgoing
+// one is taken away). Blends use both at once: the incoming opens while the outgoing closes.
+function setDeckFilter(d, v, seconds = 0.05) {
+  v = Math.max(-1, Math.min(1, v));
+  d.filter = v;
+  const hpHz = v > 0 ? 20 * Math.pow(125, v) : 20;
+  const lpHz = v < 0 ? 20000 * Math.pow(180 / 20000, -v) : 20000;
+  const t = ctx.currentTime;
+  for (const [p, hz] of [[d.gain.hp.frequency, hpHz], [d.gain.lp.frequency, lpHz]]) {
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(p.value, t);
+    p.exponentialRampToValueAtTime(hz, t + Math.max(0.01, seconds));
+  }
 }
 
 // Deck bass: 1 = full, 0 = cut (about -36 dB below 180 Hz). Above 1 boosts the record's own bass

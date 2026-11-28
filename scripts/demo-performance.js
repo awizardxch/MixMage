@@ -1227,8 +1227,137 @@
     };
   }
 
+  // ---------- ⚒️: the emoji-market product promo ----------
+  // A promo for the user's new emoji-market product (named ⚒️ for now), built from the ground up:
+  // one ant, then thousands; chips assembled like puzzle pieces; launches; data centers in orbit;
+  // ending on ⚒️ with 🐜 🧩 🛰️ (live tokens on the market). On-screen words are emojis only and there
+  // are no brand logos (no NVIDIA, no SpaceX), both by the user's choice; the orbit clip's caption
+  // strip is cropped off its files. The sound is one of their Suno songs (folder 2672), "Nothing
+  // Stays at Zero", by itself (etfPromo below).
+  // What the user rejected on the way, so it is not tried again: a three-song set with crossfades
+  // ("just a fade out and fade in"), quick filtered blends ("too fast and forced"), the whole Zero
+  // song over a disco bed (its drums ran at the wrong speed), then its acapella beat-matched over
+  // the bed ("the song order doesn't mix well"); a short and a long cut ("only have 1 video").
+  const etfSources = {
+    antLine: 'tlwU2xz1VLg', antRow: '-NHwoohKEwY', antArmy: 'GFo-I_3kCUU',
+    wafer: 'MwMyIDs9DQU', board1: 'kFlqbFORpFA', board2: 'U_OexTUIyik', board3: 'elHHJiWMSOI', board4: 'hNxCT0hYs08',
+    chipGlow: 'PWOAgNBmm18', handLine: 'vD88EyXss6Y', robots: 'VJt-x5mdGlk', puzzle: 'PAOZm_df-jk',
+    launch1: 'Jig5iZNDk88', launch2: 'hTFv4967jBg', launch3: 'IbzzwNnVgU0', launch4: '2AlIpJrncAc',
+    sat1: 'hf3VCl_MeLY', sat2: 'E5kmkyxSn7c', orbitDc: 'n_BOkhpQz0k',
+    servers1: 'Gr8j73EpMkw', servers2: 'hFbmoms5sD4', servers3: 'fGsQnuc65Qg',
+    cupola: 'xngkqPovLu8', spacewalk: 'Wfoy_OvNDvw',
+  };
+  // Out (three-frame sheets): stock-site title and end cards ("FREE STOCK", "subscribe"), a Pond5-
+  // watermarked puzzle reel and a background reel captioned on every frame (both whole sources),
+  // lens-flare white-outs on the wafer, Mars in the satellite animation, the army-ant video's
+  // millipede and sunset, a narrow caption strip under the close-up marching ants (whole source).
+  const etfKeep = {
+    one: [['antLine', range(0, 13)], ['antRow', range(0, 6)]],
+    many: [['antArmy', [6, 7, ...range(14, 27)]]], // 5 carries the uploader's watermark
+    wafer: [['wafer', [0, 3, 4, 5, 8, 12, 13, 14]]],
+    board: [['board1', range(0, 4)], ['board2', range(0, 3)], ['board3', range(0, 15)], ['board4', range(0, 2)]],
+    chip: [['chipGlow', range(0, 2)]],
+    line: [['handLine', range(0, 7)], ['robots', range(0, 7)]],
+    puzzle: [['puzzle', range(0, 3)]],
+    launch: [['launch1', range(0, 5)], ['launch2', [2, 3, 4, 6, 9, 10, 11, 13, 14, 15]], ['launch3', range(2, 12)], ['launch4', range(0, 3)]],
+    sat: [['sat1', range(0, 2)], ['sat2', range(0, 2)]],
+    orbitDc: [['orbitDc', range(8, 15)]],
+    servers: [['servers1', range(0, 15)], ['servers2', range(1, 7)], ['servers3', range(0, 2)]],
+    earth: [['cupola', [...range(4, 9), ...range(12, 29)]], ['spacewalk', range(0, 15)]],
+  };
+  function etfPools() {
+    const by = {};
+    for (const [name, id] of Object.entries(etfSources)) by[name] = clipsOf(id);
+    const pools = {};
+    for (const [name, parts] of Object.entries(etfKeep)) {
+      pools[name] = parts.flatMap(([src, ks]) => ks.map((k) => by[src][k])).filter((i) => i != null);
+      if (!pools[name].length) throw new Error(`no clips for "${name}"; cut the promo footage first`);
+    }
+    return pools;
+  }
+  // The promo (~29 s, one video; the user's call: one song, "extend the short to 30 secs and only
+  // have 1 video"): "Nothing Stays at Zero" as recorded, from the pre-chorus ("Hit the panic button
+  // now!") through the hook ("It's all going to zero!") to "until they don't!". Bars are its real
+  // ones: beats tracked on its Demucs drum stem (139.65 BPM; the full mix misreads 112). Line times
+  // from scripts/lyrics-align.py. Emojis are the market's own tickers (forge.awizard.dev): 💗 LOVE,
+  // 🐜 🧩 🛰️ the CATs, ⚒️ 🛰️ 🐜 🧩 the pool in its ticker order; the panic pops 💎 🪙 🪄⚡ 🛸.
+  async function etfPromo() {
+    const pools = etfPools();
+    const s = state.sources.find((x) => x.id === 'zeroSong');
+    if (!s) throw new Error('add "Nothing Stays at Zero" as source zeroSong first');
+    const tr = await window.api.beats({ file: s.file.replace(/zeroSong\.mp4$/, '') + '../../set2672/stems/htdemucs/Nothing Stays at Zero/drums.wav', bpm: 140 });
+    const nearest = (t) => tr.beats.reduce((a, b, i) => (Math.abs(b - t) < Math.abs(tr.beats[a] - t) ? i : a), 0);
+    let i0 = nearest(53.9); // the downbeat at the chorus: "It's all going to zero!" (54.16)
+    while ((i0 - tr.downbeat) % 4 !== 0) i0--;
+    const PRE = 4; // four bars before it: "Hit the panic button now!" (47.04) lands on the downbeat
+    i0 -= PRE * 4;
+    const songAt = (bar) => followSongTime({ beats: tr.beats, down: i0 }, bar * 16);
+    const start = songAt(0);
+    const barTime = (b) => songAt(b) - start;
+    const A = decks[0];
+    await loadDeck(A, { kind: 'source', title: s.title, url: s.url, file: s.file, bpm: tr.bpm });
+    if (!A.video.duration) await new Promise((r) => A.video.addEventListener('loadedmetadata', r, { once: true }));
+    A.video.currentTime = start;
+    A.rate = 1;
+    applyRate(A);
+    A.vol = 1;
+    A.q('vol').value = 1;
+    setDeckBass(A, 1);
+    setDeckFilter(A, 0, 0.01);
+    applyVolumes();
+    setDeckLowCut(0);
+    const P = PRE;
+    const BARS = P + 13; // to just after "until they don't!" (74.72), before verse 2 (76.2)
+    const { cuts, section } = picturePlan(pools, 240 / tr.bpm);
+    section(0, P, 0.5, ['servers', 'many']); // sell it, dump it, run it, crash it: the market panics
+    section(P, P + 2, 1, ['one'], true); // It's all going to zero!: one ant
+    section(P + 2, P + 7, 0.5, ['one', 'many']); // zero! zero! … crypto's going to zero!: more and more
+    section(P + 7, P + 8, 0.5, ['many']); // everything's collapsing
+    section(P + 8, P + 11, 0.5, ['wafer', 'chip', 'puzzle', 'board', 'line']); // until it doesn't: built from the ground up
+    section(P + 11, P + 12, 0.5, ['launch']); // everybody loses hope
+    section(P + 12, BARS, 0.5, ['sat', 'orbitDc'], true); // until they don't!
+    await preparePictures(pools, cuts.slice(0, 5).map((c) => c[1]));
+    select(cuts[0][1]);
+    return {
+      bpm: tr.bpm, bars: BARS, keepDeckTime: true, timeOf: (b) => barTime(b) * 1000,
+      info: { bpm: +tr.bpm.toFixed(2), start: +start.toFixed(2), seconds: +barTime(BARS).toFixed(1), cuts: cuts.length },
+      events(at) {
+        scheduleCuts(at, cuts);
+        at(0, () => {
+          fade(0);
+          setDeckPlaying(A, true);
+          Object.assign(fx, { bpm: tr.bpm, follow: { deck: A, beats: tr.beats } });
+          fxPreset('off');
+          fxUse([['zoomPunch', { amount: 0.45, every: 1 }], ['shake', { amount: 0.3, every: 2 }]]);
+        });
+        const text = (b, t, o) => at(b, () => fxText(t, { where: 'center', size: 230, ...o }));
+        // The panic: the other tickers pop on the shouts.
+        text(0.02, '💎', { style: 'pop', hold: barTime(1) - 0.1 }); // hit the panic button now!
+        text(1, '🪙', { style: 'pop', hold: barTime(0.45) }); // run it!
+        text(1.5, '🪄⚡', { style: 'pop', hold: barTime(0.45) }); // crash it!
+        text(2, '💎 🪙 🪄⚡ 🛸', { style: 'pop', every: 0.5, size: 150, hold: barTime(2) - 0.1 }); // everybody scream it loud!
+        at(P, () => { fxPreset('off'); fxUse([['zoomPunch', { amount: 0.35, every: 1 }]]); fxFlash(); });
+        text(P + 0.02, '💗', { style: 'pop', hold: barTime(1) - 0.1 });
+        text(P + 1, '🐜', { style: 'pop', hold: barTime(1) - 0.1 });
+        text(P + 2, '🐜 🐜 🐜 🐜 🐜 🐜 🐜 🐜', { style: 'pop', every: 1, size: 130, hold: barTime(6) - 0.1 });
+        at(P + 7, () => { fxUse([['zoomPunch', { amount: 0.5, every: 1 }], ['shake', { amount: 0.35, every: 2 }]]); });
+        at(P + 8, () => { fxPreset('brand'); fxFlash(); });
+        text(P + 8, '🌱', { style: 'pop', hold: barTime(1) - 0.1 });
+        text(P + 9, '🧩', { style: 'pop', hold: barTime(2) - 0.1 });
+        at(P + 11, () => { fxPreset('warp'); fxFlash(); });
+        text(P + 11, '🛸', { style: 'pop', hold: barTime(1) - 0.1 });
+        at(P + 12, () => fxPreset('cosmos'));
+        text(P + 12, '⚒️ 🛰️ 🐜 🧩', { style: 'pop', every: 0.5, size: 170, hold: barTime(1.2) });
+        // Let the last word ring, then take the record down over half a bar.
+        at(BARS - 0.5, () => { for (let n = 1; n <= 8; n++) setTimeout(() => { A.vol = 1 - n / 8; A.q('vol').value = A.vol; applyVolumes(); }, (barTime(0.5) * 1000 * n) / 8); });
+        at(BARS - 0.03, () => fxFreeze(0.6));
+      },
+    };
+  }
+
   // ---------- variants ----------
   const variants = {
+    etfPromo,
     emptyPacksVideo,
     lavaChickenVideo,
     mothershipVideo,
@@ -1488,7 +1617,7 @@
     L.rrRoot = L.rrTone != null && state.pads[L.rrTone].root != null ? state.pads[L.rrTone].root : 60;
     // The first crate (songs and Road Runner sounds) is only needed by the pieces built on it; the
     // music videos bring their own sources, so they run on a library that no longer holds it.
-    const OWN_CRATE = ['emptyPacksVideo', 'lavaChickenVideo', 'mothershipVideo', 'rodeoVideo', 'rodeoEdit', 'rodeoFull', 'fxSampler'];
+    const OWN_CRATE = ['etfPromo', 'emptyPacksVideo', 'lavaChickenVideo', 'mothershipVideo', 'rodeoVideo', 'rodeoEdit', 'rodeoFull', 'fxSampler'];
     const crateOk = Object.values({ td: L.td, gold: L.gold, pp: L.pp, pg: L.pg, rr: L.rr }).every((v) => v.length >= 2);
     if (!OWN_CRATE.includes(window.__demoVariant)) for (const [k, v] of Object.entries({ td: L.td, gold: L.gold, pp: L.pp, pg: L.pg, rr: L.rr })) if (v.length < 2) throw new Error(`not enough clips for "${k}"`);
 

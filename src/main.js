@@ -612,6 +612,16 @@ function createWindow() {
         const bt = await win.webContents.executeJavaScript('window.__smokeBeat()');
         console.log('SMOKE_BEAT', JSON.stringify(bt));
         if (!(bt.peak > 0.2) || !(bt.minDuck < 0.7) || !(bt.restored > 0.95)) errors++;
+        // The deck DJ filter: +1 raises the high-pass to about 2.5 kHz, -1 closes the low-pass to about
+        // 180 Hz, 0 opens both again.
+        const flt = await win.webContents.executeJavaScript(`(async () => {
+          const d = decks[0]; const w = (ms) => new Promise((r) => setTimeout(r, ms)); const f = () => [Math.round(d.gain.hp.frequency.value), Math.round(d.gain.lp.frequency.value)];
+          setDeckFilter(d, 1, 0.02); await w(120); const up = f();
+          setDeckFilter(d, -1, 0.02); await w(120); const down = f();
+          setDeckFilter(d, 0, 0.02); await w(120); return { up, down, open: f() };
+        })()`);
+        console.log('SMOKE_FILTER', JSON.stringify(flt));
+        if (!(flt.up[0] > 2000) || !(flt.down[1] < 250) || !(flt.open[0] < 30 && flt.open[1] > 15000)) errors++;
         const finals = fs.readdirSync(recordingsDir).filter((f) => f.endsWith('.mp4'));
         console.log('SMOKE_FILES', JSON.stringify(finals.map((f) => [f, fs.statSync(path.join(recordingsDir, f)).size])));
         const ws = auto.wholeSong;
