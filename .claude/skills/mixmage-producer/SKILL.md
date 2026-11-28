@@ -34,6 +34,7 @@ the user plainly which judgments are measured and which are theirs to make by ea
 | Hearing whether the added kick is on the band | `node scripts/sync-check.js <render> <song> <beats.json> <from> <to>`: matched-filters the beat box's kick in the render against the song's tracked beats; in sync = median within ~5 ms, most beats within 15 ms |
 | Hearing whether the added parts are subtle | `node scripts/compare-mix.js <remix> <original> <from> <to> [originalTimeAtFrom]`: each band's share of the total in the original and the remix over the same music. Subtle = low bands within +2 dB, the rest within 1.5 dB; mids losing share means the added beat buries the voice and guitars. Give the last argument when the song repeats itself, or it can match the wrong chorus |
 | Knowing when each lyric line is sung | `.venv-whisper/Scripts/python.exe scripts/lyrics-align.py <audio> <lyrics.txt> <out.json> medium`: local Whisper word times, then every line matched to them globally. `medium` timed all 58 lines of one song; on another it hallucinated "na-na" over a verse that `small` heard correctly, so run both and combine when scores are low. Never time a storyline by assuming four bars per four lines: that put the pictures on the wrong lines. Suno MP3s carry their lyrics in a `lyrics-eng` tag |
+| Finding a record's real tempo, or its acapella | `.venv-demucs/Scripts/demucs.exe -o demo/<folder>/stems <song>` splits it (htdemucs: drums, bass, vocals, other). Track beats on `drums.wav`, not the full mix: "Nothing Stays at Zero" reads a false 112 BPM whole and 139.65 (96% agreement) from its drum stem. A wrong tempo is why two records clash |
 | Watching for dark, washed-out, frozen or flashing picture | `node scripts/check-video.js <video>`: DARK/WASHED/FROZEN stretches and the worst flashes per second (over 3 fails) |
 | Hearing a flam | `node scripts/beat-phase.js <file> <bpm> <from> <to>`: folds low-band onsets over the beat; one peak = added drums land with the song, two = they don't |
 
@@ -80,6 +81,7 @@ Existing variants (all in `scripts/demo-performance.js`, in the `variants` objec
 | `rodeoFull` | The whole of "Chips" (5:43, every lyric) as a dance record: three builds, four drops, two breakdowns, picture telling the song |
 | `fxSampler` | Every effect preset in turn over "Chips", named on screen, then text and a freeze |
 | `mothershipVideo` | aWizard's "Mothership" exactly as recorded: a disco-in-space story (contact, launch, warp, spacewalk under the mirror ball, then everyone dancing everywhere: streets, rooftops, beaches, clubs, raves, festivals, 1920s dance halls, moon hops; a drift past Earth for the breakdown). The user turned down the space-station crew as the dancers: party footage should be people having fun in many places, not one group cut to its tracked bars, with the light presets; then `original-audio.js`. `trackSong(id, bpm)` tracks any record with the app's bar numbers |
+| `etfPromo` | The ⚒️ emoji-market product promo (29 s, the only cut; the user asked for one video, not a short and a long): "Nothing Stays at Zero" by itself, from "Hit the panic button now!" to "until they don't!", cut to its drum-stem beats. Panic (servers, swarms, 💎 🪙 🪄⚡ 🛸) → one ant (💗 🐜) → the colony → built from the ground up (🌱 🧩: wafers, chips, puzzle, boards) → launch (🛸) → orbit, ending on the pool ticker ⚒️ 🛰️ 🐜 🧩. See "The ⚒️ promo" below |
 | `rodeoVideo` | The music video: "Chips" exactly as recorded, the rodeo story cut to its tracked bars, Shroom FX pulsing on the band's beats; then `original-audio.js` lays in the record's own sound |
 
 **When the user wants the song itself** (they did, after hearing the dance versions): play it from
@@ -207,6 +209,37 @@ juggling a bar, stabs and the echo-out.
   run in the middle with `sub -10 dB` is usually the song's own breakdown (compare with the same
   song in another render before "fixing" it). A single flagged half-second is something you added.
 
+### Mixing two records, and when not to (the ⚒️ promo)
+
+What the user turned down, in order, so it is not tried again:
+1. Fade one song out and the next in: "we need to be true DJs". A transition overlaps: the incoming
+   record enters behind a filter, the outgoing one's filter closes as the new one takes over.
+   `setDeckFilter(deck, v, seconds)` is that one knob (-1 full low-pass … 0 open … 1 full high-pass);
+   an entry at 0.45 opening to 0.03 over 4 bars, an exit closing to 0.85 over 2.
+2. Quick filtered blends between several songs: "too fast and forced". Let rhythm patterns develop;
+   use few songs and long passages.
+3. A whole second record over a disco bed: its drums ran at another speed ("the intro clashes and
+   rubs the ear"). Fix the tempo first (Demucs drum stem, above), lay in only its acapella, stretched
+   to the bed with pitch kept: `ffmpeg -i vocals.wav -af rubberband=tempo=<bed/own>:pitch=1 out.wav`,
+   then start it on a bed downbeat with its own downbeat. Check the keys are compatible (`key.js`).
+4. Even beat-matched, two songs in a 30 s piece did not work: "the song order doesn't mix well".
+   **Under about a minute, play one song.** Pick the section by its lyrics (`lyrics-align.py`) and
+   start on a downbeat that a line lands on.
+
+A deck started mid-piece is heard about 37 ms after the position it reports; start overlays that
+much further in.
+
+### The ⚒️ promo
+
+- The product is named ⚒️ for now. Words on screen are emojis only: the emoji market's own tickers
+  (forge.awizard.dev `/api/public/v1/tokens`): 💗 LOVE, 🐜, 🧩, 🛰️, 🌱 SPROUT, 🛸 UFO, 💎, 🪙,
+  🪄⚡, and the pool ⚒️ 🛰️ 🐜 🧩 in its ticker order. Put each where the picture and the lyric say it
+  (🐜 on the ants, 🧩 on the chips, 🛸 on the launch). Check the ticker list before reusing it; the
+  market changes.
+- No brands: no NVIDIA, no SpaceX, no logos, no channel watermarks, generic footage.
+- Sources and the clips kept from each are `etfSources` and `etfKeep` in the script; the song and
+  its stems and lyric timing are in `demo/set2672/`.
+
 ## Effects: what is available and how to choose
 
 Everything is in `src/renderer/fx.js`; the user picks the same things from the FX menu under the
@@ -331,7 +364,11 @@ the house-set style. They are different traditions; do not mix them in one short
 5. Build a contact sheet with `node scripts/clip-sheet.js demo/extra-library <source id> <out.jpg>`
    (three labeled frames per clip), Read it, and note the indexes to exclude (logos, credits, title
    cards, banners, brand signs, watermarks, near-black). A sheet of first frames only is not enough:
-   "EVERY JULY" banners inside a newsreel clip got into a render that way.
+   "EVERY JULY" banners inside a newsreel clip got into a render that way. Look in the corners and
+   along the edges too: a channel watermark in one army-ant clip, and a caption strip naming NVIDIA
+   and SpaceX across the top of the only orbit-data-center footage, both reached a render. When the
+   footage is worth keeping, crop the strip off its clip files in `demo/extra-library/clips` (back
+   them up first; crop to 16:9 and scale back to 1280x720) rather than dropping it.
 6. Picture clips must last as long as the cut they fill. A one-shot that ends early leaves the
    viewer on the deck's own picture, which for a record is its cover art. `picturePlan` in the rodeo
    pieces only deals clips long enough.
